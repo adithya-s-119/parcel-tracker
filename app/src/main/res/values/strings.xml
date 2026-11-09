@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Parcel</string>
+    <string name="widget_name">Parcel deliveries</string>
+    <string name="widget_description">The next few deliveries from your calendar.</string>
+</resources>
