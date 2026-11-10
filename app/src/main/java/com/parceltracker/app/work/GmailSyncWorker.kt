@@ -15,7 +15,8 @@ class GmailSyncWorker(
     override suspend fun doWork(): Result {
         val app = applicationContext as? ParcelApp ?: return Result.success()
         val settings = app.container.settingsStore.settings.first()
-        if (!settings.autoSync || settings.accountEmail == null) return Result.success()
+        if (!settings.autoSync) return Result.success()
+        if (settings.accountEmail == null && !settings.smsEnabled) return Result.success()
 
         return when (app.container.syncManager.sync().outcome) {
             SyncResult.Outcome.SUCCESS,
