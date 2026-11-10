@@ -8,7 +8,7 @@ A quiet Android app that reads your order emails, finds the promised delivery da
 - **Or use a Gmail app password + IMAP** — free, automatic, and no Google Cloud project.
 - **Or skip email entirely** and share an order email to Parcel, or add deliveries by hand.
 - **Read delivery texts (SMS)** on-device to catch courier and store delivery updates.
-- **Scans order and shipping emails** from Amazon, Flipkart, Myntra, Ajio, Meesho, Nykaa, Croma, eBay, Etsy, Walmart, and more.
+- **Scans order and shipping emails** from Amazon, Flipkart, Myntra, Ajio, Meesho, Nykaa, Croma, eBay, Etsy, Walmart, Robu, Robocraze, Hubtronics, Xcluma, Probots, Sharvie Electronics, FlyRobo, Robokits, ThinkRobotics, RhydoLABZ, and more.
 - **Extracts the promised delivery date** from natural language:
   - `Arriving Thursday, November 12`
   - `Delivery by Tue, 12 Nov`
@@ -17,10 +17,14 @@ A quiet Android app that reads your order emails, finds the promised delivery da
   - `Delivery in 3 days`
   - `Arriving Nov 12 – Nov 15` (uses the end of the window)
   - It avoids return windows, order dates, and promotional dates.
-- **Merges updates** from shipping and delivered emails into one delivery, using the order number or email thread.
+- **Merges updates** from shipping and delivered emails into one delivery, using the order number, tracking number, or email thread.
+- **Deduplicates across Gmail and SMS** so the same parcel appears once, even when one source only has the product name.
+- **Tracks real delivery states**: scheduled, shipped, delayed, ready for pickup, out for delivery, delivery failed, delivered, cancelled, and returned to sender.
+- **Filters promotional email and SMS** so offers and cashback blasts do not become fake deliveries.
 - **Calendar** with month navigation, delivery dots, and a day-by-day view.
-- **Orders list** with search, filters, and manual edits. You can fix a date, change the status, or add an order by hand.
-- **Home-screen widget** showing the next few deliveries in date order. Resize it for more.
+- **Orders list** with search, filters, and manual edits. You can fix a date, change the status, see the full product name, or add an order by hand.
+- **Six color themes** in Settings → Appearance (Forest, Ocean, Terracotta, Plum, Indigo, Rose).
+- **Home-screen widget** showing the next few deliveries in date order with large, readable text and the selected theme. Resize it for more.
 - **Daily reminder** at 9 AM for deliveries arriving today or tomorrow.
 - **Works without Gmail** — skip sign-in and add deliveries manually.
 - **Private by design** — emails are parsed on-device. There is no backend and no analytics.

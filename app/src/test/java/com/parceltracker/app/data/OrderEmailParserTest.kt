@@ -66,6 +66,20 @@ class OrderEmailParserTest {
     }
 
     @Test
+    fun `detects successfully delivered in the subject`() {
+        val parsed = OrderEmailParser.parse(
+            message(
+                subject = "Your Swiggy order was successfully delivered",
+                from = "Swiggy <noreply@swiggy.in>",
+                body = "Enjoy your meal. Order # 252426828133601.",
+                received = LocalDate.of(2026, 11, 10),
+            ),
+        )
+
+        assertEquals(OrderStatus.DELIVERED, parsed?.status)
+    }
+
+    @Test
     fun `parses an order confirmation with a numeric date`() {
         val parsed = OrderEmailParser.parse(
             message(
@@ -181,6 +195,144 @@ class OrderEmailParserTest {
         )
 
         assertNull(parsed)
+    }
+
+    @Test
+    fun `recognises hobby and electronics store orders`() {
+        val stores = mapOf(
+            "orders@robu.in" to "Robu",
+            "orders@robocraze.com" to "Robocraze",
+            "orders@hubtronics.in" to "Hubtronics",
+            "orders@xcluma.com" to "Xcluma",
+            "orders@probots.co.in" to "Probots",
+            "orders@sharvielectronics.com" to "Sharvie Electronics",
+            "orders@flyrobo.in" to "FlyRobo",
+            "orders@robokits.co.in" to "Robokits",
+            "orders@thinkrobotics.in" to "ThinkRobotics",
+            "orders@rhydolabz.com" to "RhydoLABZ",
+        )
+
+        for ((from, merchant) in stores) {
+            val parsed = OrderEmailParser.parse(
+                message(
+                    subject = "Order Confirmation #RB-100234",
+                    from = "Store <$from>",
+                    body = "Thank you for your order. Order ID: RB-100234. " +
+                        "Expected delivery: 14 November 2026.",
+                    received = LocalDate.of(2026, 11, 10),
+                ),
+            )
+
+            assertEquals(merchant, parsed?.merchant)
+        }
+    }
+
+    @Test
+    fun `expands a truncated subject product name from the email body`() {
+        val parsed = OrderEmailParser.parse(
+            message(
+                subject = "Delivered: “STYLEDOSE Women's Diamond...”",
+                from = "Amazon <ship-update@amazon.in>",
+                body = "STYLEDOSE Women's Diamond Stud Earrings for Women\n" +
+                    "Quantity: 1\nOrder # 403-8725311-7564316\nDelivered today.",
+                received = LocalDate.of(2026, 11, 10),
+            ),
+        )
+
+        assertEquals(
+            "STYLEDOSE Women's Diamond Stud Earrings for Women",
+            parsed?.itemName,
+        )
+        assertEquals(OrderStatus.DELIVERED, parsed?.status)
+    }
+
+    @Test
+    fun `does not treat a progress timeline as out for delivery`() {
+        val parsed = OrderEmailParser.parse(
+            message(
+                subject = "Delivery update for your Amazon order",
+                from = "Amazon <ship-update@amazon.in>",
+                body = "Your order is on its way. Progress: Ordered, Shipped, " +
+                    "Out for delivery, Delivered. Order # 171-1234567-1234567.",
+                received = LocalDate.of(2026, 11, 10),
+            ),
+        )
+
+        assertEquals(OrderStatus.SHIPPED, parsed?.status)
+    }
+
+    @Test
+    fun `trusts an ordered subject over the email timeline`() {
+        val parsed = OrderEmailParser.parse(
+            message(
+                subject = "Ordered: “Test Product”",
+                from = "Amazon <ship-update@amazon.in>",
+                body = "Arriving 12 November. Progress: Ordered, Shipped, " +
+                    "Out for delivery, Delivered. Order # 171-1234567-1234567.",
+                received = LocalDate.of(2026, 11, 10),
+            ),
+        )
+
+        assertEquals(OrderStatus.UPCOMING, parsed?.status)
+    }
+
+    @Test
+    fun `detects a failed delivery attempt`() {
+        val parsed = OrderEmailParser.parse(
+            message(
+                subject = "Delivery attempt failed for your Amazon order",
+                from = "Amazon <ship-update@amazon.in>",
+                body = "We attempted delivery today but no one was available. " +
+                    "Order # 171-1234567-1234567.",
+                received = LocalDate.of(2026, 11, 10),
+            ),
+        )
+
+        assertEquals(OrderStatus.DELIVERY_FAILED, parsed?.status)
+    }
+
+    @Test
+    fun `detects a delayed delivery and its new date`() {
+        val parsed = OrderEmailParser.parse(
+            message(
+                subject = "Your Amazon order is delayed",
+                from = "Amazon <ship-update@amazon.in>",
+                body = "The new delivery date is 15 November. Order # 171-1234567-1234567.",
+                received = LocalDate.of(2026, 11, 10),
+            ),
+        )
+
+        assertEquals(OrderStatus.DELAYED, parsed?.status)
+        assertEquals(LocalDate.of(2026, 11, 15), parsed?.promisedDate)
+    }
+
+    @Test
+    fun `detects ready for pickup`() {
+        val parsed = OrderEmailParser.parse(
+            message(
+                subject = "Your package is ready for pickup",
+                from = "Amazon <ship-update@amazon.in>",
+                body = "Collect your package from the Amazon Hub. Order # 171-1234567-1234567.",
+                received = LocalDate.of(2026, 11, 10),
+            ),
+        )
+
+        assertEquals(OrderStatus.READY_FOR_PICKUP, parsed?.status)
+    }
+
+    @Test
+    fun `detects returned to sender`() {
+        val parsed = OrderEmailParser.parse(
+            message(
+                subject = "Your package was returned to sender",
+                from = "Amazon <ship-update@amazon.in>",
+                body = "The package could not be delivered and was returned to sender. " +
+                    "Order # 171-1234567-1234567.",
+                received = LocalDate.of(2026, 11, 10),
+            ),
+        )
+
+        assertEquals(OrderStatus.RETURNED, parsed?.status)
     }
 
     @Test

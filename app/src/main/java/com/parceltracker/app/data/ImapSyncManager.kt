@@ -69,7 +69,9 @@ class ImapSyncManager(
 
         progress("Reading ${toFetch.size} new emails…")
         val messages = try {
-            client.fetchMessages(email, appPassword, toFetch)
+            client.fetchMessages(email, appPassword, toFetch) { read, total ->
+                progress("Reading emails $read/$total…")
+            }
         } catch (error: Exception) {
             return failure(error)
         }

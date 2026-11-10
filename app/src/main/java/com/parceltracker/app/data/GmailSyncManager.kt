@@ -189,7 +189,9 @@ class GmailSyncManager(
     private fun buildQuery(days: Int): String {
         val window = days.coerceIn(30, 365)
         return "newer_than:${window}d -in:spam -in:trash " +
+            "-category:promotions -category:social -category:forums " +
             "(category:purchases OR subject:order OR subject:delivery " +
-            "OR subject:arriving OR subject:shipped OR subject:dispatched)"
+            "OR subject:arriving OR subject:shipped OR subject:dispatched " +
+            "OR ${OrderEmailParser.HOBBY_STORE_QUERY})"
     }
 }

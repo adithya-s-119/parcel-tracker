@@ -8,9 +8,13 @@ import java.time.LocalDate
 enum class OrderStatus {
     UPCOMING,
     SHIPPED,
+    DELAYED,
+    READY_FOR_PICKUP,
     OUT_FOR_DELIVERY,
+    DELIVERY_FAILED,
     DELIVERED,
     CANCELLED,
+    RETURNED,
 }
 
 @Entity(
@@ -45,7 +49,9 @@ data class DeliveryOrder(
         get() = promisedEpochDay?.let(LocalDate::ofEpochDay)
 
     val isActive: Boolean
-        get() = status != OrderStatus.DELIVERED && status != OrderStatus.CANCELLED
+        get() = status != OrderStatus.DELIVERED &&
+            status != OrderStatus.CANCELLED &&
+            status != OrderStatus.RETURNED
 }
 
 @Entity(tableName = "scanned_emails")

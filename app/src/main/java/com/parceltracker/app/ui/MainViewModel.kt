@@ -20,6 +20,7 @@ import com.parceltracker.app.data.ImapError
 import com.parceltracker.app.data.OrderDraft
 import com.parceltracker.app.data.OrderEmailParser
 import com.parceltracker.app.data.OrderStatus
+import com.parceltracker.app.data.ParcelAccent
 import com.parceltracker.app.data.SmsPermission
 import com.parceltracker.app.data.SyncResult
 import com.parceltracker.app.notifications.Notifications
@@ -317,6 +318,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setScanDays(days: Int) {
         viewModelScope.launch {
             container.settingsStore.setScanDays(days)
+        }
+    }
+
+    fun setAccent(accent: ParcelAccent) {
+        viewModelScope.launch {
+            container.settingsStore.setAccent(accent)
+            DeliveryWidget.refresh(getApplication())
         }
     }
 

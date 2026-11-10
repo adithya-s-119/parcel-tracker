@@ -5,6 +5,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,9 +27,11 @@ import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material.icons.outlined.Message
 import androidx.compose.material.icons.outlined.NotificationsNone
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material3.AlertDialog
@@ -54,6 +57,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -63,12 +67,11 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.parceltracker.app.data.AppSettings
 import com.parceltracker.app.data.AuthMode
+import com.parceltracker.app.data.ParcelAccent
 import com.parceltracker.app.data.SmsPermission
 import com.parceltracker.app.ui.Dates
 import com.parceltracker.app.ui.components.GoogleGMark
 import com.parceltracker.app.ui.components.SignInHelpDialog
-import com.parceltracker.app.ui.theme.Forest
-import com.parceltracker.app.ui.theme.PaperBright
 
 @Composable
 fun SettingsScreen(
@@ -83,6 +86,7 @@ fun SettingsScreen(
     onAutoSync: (Boolean) -> Unit,
     onNotifications: (Boolean) -> Unit,
     onScanDays: (Int) -> Unit,
+    onAccent: (ParcelAccent) -> Unit,
     onRebuild: () -> Unit,
     onDeleteAll: () -> Unit,
     onAdd: () -> Unit,
@@ -266,6 +270,60 @@ fun SettingsScreen(
         }
 
         item {
+            SectionTitle("Appearance")
+        }
+
+        item {
+            Surface(
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            ) {
+                Column {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        IconBox(icon = Icons.Outlined.Palette)
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Theme",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text = "Pick the accent used across Parcel",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    Column(
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        ParcelAccent.entries.chunked(3).forEach { row ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                row.forEach { accent ->
+                                    ThemeSwatch(
+                                        accent = accent,
+                                        selected = settings.accent == accent,
+                                        onClick = { onAccent(accent) },
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                }
+                                repeat(3 - row.size) {
+                                    Spacer(modifier = Modifier.weight(1f))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
             SectionTitle("Reminders")
         }
 
@@ -402,7 +460,7 @@ fun SettingsScreen(
             title = { Text("Rebuild from Gmail?") },
             text = {
                 Text(
-                    "This clears Gmail-sourced deliveries and scans your inbox again. " +
+                    "This clears imported deliveries from Gmail and texts, then scans both again. " +
                         "Manual deliveries and edits are kept.",
                 )
             },
@@ -474,6 +532,60 @@ fun SettingsScreen(
             dismissButton = {
                 TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") }
             },
+        )
+    }
+}
+
+@Composable
+private fun ThemeSwatch(
+    accent: ParcelAccent,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(CircleShape)
+                .background(Color(accent.swatch))
+                .border(
+                    width = if (selected) 2.dp else 1.dp,
+                    color = if (selected) {
+                        MaterialTheme.colorScheme.onSurface
+                    } else {
+                        MaterialTheme.colorScheme.outlineVariant
+                    },
+                    shape = CircleShape,
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (selected) {
+                Icon(
+                    imageVector = Icons.Outlined.Check,
+                    contentDescription = "Selected",
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = accent.label,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (selected) {
+                MaterialTheme.colorScheme.onSurface
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -635,8 +747,8 @@ private fun AccountCard(
                         .height(50.dp),
                     shape = RoundedCornerShape(15.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Forest,
-                        contentColor = PaperBright,
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
                     ),
                 ) {
                     GoogleGMark()

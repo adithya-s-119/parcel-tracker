@@ -69,10 +69,16 @@ class OrderRepository(private val dao: OrderDao) {
         threadId: String,
         receivedEpochMillis: Long,
         source: String = "GMAIL",
+        fallbackItem: String? = null,
     ): MergeResult {
-        val existing = parsed.orderNumber
-            ?.let { dao.findByOrderNumber(it) }
+        var existing = parsed.orderNumber
+            ?.let { dao.findByReference(it) }
+            ?: parsed.trackingNumber?.let { dao.findByReference(it) }
             ?: threadId.takeIf { it.isNotBlank() }?.let { dao.findByThreadId(it) }
+
+        if (existing == null) {
+            existing = findCrossSourceDuplicate(parsed, source)
+        }
 
         val now = System.currentTimeMillis()
 
@@ -93,7 +99,7 @@ class OrderRepository(private val dao: OrderDao) {
                 id = messageId,
                 threadId = threadId,
                 merchant = parsed.merchant,
-                itemName = parsed.itemName ?: fallbackItemName(parsed),
+                itemName = parsed.itemName ?: fallbackItem ?: fallbackItemName(parsed),
                 orderNumber = parsed.orderNumber,
                 trackingNumber = parsed.trackingNumber,
                 carrier = parsed.carrier,
@@ -110,8 +116,8 @@ class OrderRepository(private val dao: OrderDao) {
             return MergeResult.INSERTED
         }
 
-        val mergedStatus = mergeStatus(existing.status, parsed.status)
         val newerEmail = receivedEpochMillis >= existing.emailEpochMillis
+        val mergedStatus = mergeStatus(existing.status, parsed.status, newerEmail)
 
         val mergedDate = when {
             existing.isEdited -> existing.promisedEpochDay
@@ -144,19 +150,85 @@ class OrderRepository(private val dao: OrderDao) {
         return MergeResult.UPDATED
     }
 
-    private fun mergeStatus(current: OrderStatus, incoming: OrderStatus): OrderStatus {
-        val currentRank = statusRank(current)
-        val incomingRank = statusRank(incoming)
-        return if (incomingRank >= currentRank) incoming else current
+    /**
+     * Gmail and SMS often describe the same order. If the order number or
+     * tracking ID is missing from one of them, match on the product name and
+     * a nearby delivery date instead of inserting a second card.
+     */
+    private suspend fun findCrossSourceDuplicate(
+        parsed: OrderEmailParser.ParsedOrder,
+        source: String,
+    ): DeliveryOrder? {
+        val otherSources = if (source == "SMS") {
+            listOf("GMAIL", "IMAP")
+        } else {
+            listOf("SMS")
+        }
+        val candidates = dao.findBySources(otherSources)
+        if (candidates.isEmpty()) return null
+
+        parsed.trackingNumber?.takeIf { it.isNotBlank() }?.let { tracking ->
+            candidates.firstOrNull {
+                it.trackingNumber?.equals(tracking, ignoreCase = true) == true
+            }?.let { return it }
+        }
+
+        val item = parsed.itemName?.takeIf { it.isNotBlank() } ?: return null
+        val itemTokens = itemTokens(item)
+        if (itemTokens.size < 2) return null
+
+        return candidates.firstOrNull { candidate ->
+            candidate.merchant.equals(parsed.merchant, ignoreCase = true) &&
+                sameProduct(itemTokens, itemTokens(candidate.itemName)) &&
+                datesAreClose(parsed.promisedDate?.toEpochDay(), candidate.promisedEpochDay)
+        }
     }
 
-    private fun statusRank(status: OrderStatus): Int = when (status) {
-        OrderStatus.UPCOMING -> 1
-        OrderStatus.SHIPPED -> 2
-        OrderStatus.OUT_FOR_DELIVERY -> 3
-        OrderStatus.DELIVERED -> 4
-        OrderStatus.CANCELLED -> 5
+    private fun datesAreClose(first: Long?, second: Long?): Boolean {
+        if (first == null || second == null) return false
+        return kotlin.math.abs(first - second) <= 2L
     }
+
+    private fun sameProduct(first: Set<String>, second: Set<String>): Boolean {
+        if (first.isEmpty() || second.isEmpty()) return false
+        val overlap = first.intersect(second).size
+        return overlap >= 2 && overlap.toDouble() / minOf(first.size, second.size) >= 0.6
+    }
+
+    private fun itemTokens(value: String?): Set<String> =
+        value.orEmpty()
+            .lowercase(Locale.ENGLISH)
+            .replace(Regex("[^a-z0-9]+"), " ")
+            .split(' ')
+            .filter { it.length >= 3 && it !in GENERIC_TOKENS }
+            .toSet()
+
+    private fun mergeStatus(
+        current: OrderStatus,
+        incoming: OrderStatus,
+        newerEmail: Boolean,
+    ): OrderStatus {
+        // Terminal states stick. A cancellation/return can override delivery.
+        if (current == OrderStatus.CANCELLED) return OrderStatus.CANCELLED
+        if (current == OrderStatus.RETURNED) return OrderStatus.RETURNED
+        if (incoming == OrderStatus.CANCELLED || incoming == OrderStatus.RETURNED) {
+            return incoming
+        }
+        if (incoming == OrderStatus.DELIVERED) return OrderStatus.DELIVERED
+        if (current == OrderStatus.DELIVERED) return OrderStatus.DELIVERED
+
+        // For live states, the latest email wins: out for delivery -> failed ->
+        // ready for pickup -> out for delivery again all need to be reflected.
+        return if (newerEmail) incoming else current
+    }
+
+    private val GENERIC_TOKENS = setOf(
+        "your", "the", "and", "for", "with", "from", "has", "have", "been",
+        "order", "item", "items", "product", "package", "parcel", "shipment",
+        "delivery", "delivered", "shipping", "shipped", "arriving", "arrive",
+        "amazon", "flipkart", "myntra", "ajio", "meesho", "nykaa", "store",
+        "this", "that", "will", "today", "tomorrow", "status", "update",
+    )
 
     private fun fallbackItemName(parsed: OrderEmailParser.ParsedOrder): String {
         var value = parsed.emailSubject
@@ -173,7 +245,8 @@ class OrderRepository(private val dao: OrderDao) {
                 Regex("(?i)^(?:your\\s+)?(?:amazon(?:\\.[a-z]+)?\\s+)?order\\s+(?:confirmation|confirmed|update|details|number)\\s*[:\\-–]?\\s*"),
                 "",
             )
-            .replace(Regex("(?i)^order\\s*[:\\-–]?\\s*"), "")
+            .replace(Regex("(?i)^(?:ordered|order\\s+placed)\\s*[:#\\-–]?\\s*"), "")
+            .replace(Regex("(?i)^order\\s*[:#\\-–]\\s*"), "")
             .trim()
 
         if (value.lowercase(Locale.ENGLISH) in setOf("your order", "order", "order confirmed", "confirmation")) {

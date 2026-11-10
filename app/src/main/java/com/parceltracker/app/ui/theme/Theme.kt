@@ -2,6 +2,7 @@ package com.parceltracker.app.ui.theme
 
 import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
@@ -9,10 +10,12 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import com.parceltracker.app.data.OrderStatus
+import com.parceltracker.app.data.ParcelAccent
 
 private val LightColors = lightColorScheme(
     primary = Forest,
@@ -86,12 +89,41 @@ val ParcelShapes = Shapes(
     extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(34.dp),
 )
 
+private fun ColorScheme.withAccent(accent: ParcelAccent, dark: Boolean): ColorScheme {
+    val themed = copy(
+        primary = Color(if (dark) accent.darkPrimary else accent.lightPrimary),
+        onPrimary = Color(if (dark) accent.darkOnPrimary else accent.lightOnPrimary),
+        primaryContainer = Color(if (dark) accent.darkContainer else accent.lightContainer),
+        onPrimaryContainer = Color(if (dark) accent.darkOnContainer else accent.lightOnContainer),
+    )
+    if (accent == ParcelAccent.FOREST) return themed
+
+    // Tint the paper/night neutrals toward the chosen theme so the whole app
+    // picks up the accent instead of keeping the default green cast.
+    val tint = Color(if (dark) accent.darkContainer else accent.lightContainer)
+    fun blend(color: Color, amount: Float): Color = lerp(color, tint, amount)
+
+    return themed.copy(
+        background = blend(themed.background, if (dark) 0.20f else 0.32f),
+        surface = blend(themed.surface, if (dark) 0.24f else 0.20f),
+        surfaceVariant = blend(themed.surfaceVariant, if (dark) 0.32f else 0.36f),
+        outline = blend(themed.outline, if (dark) 0.22f else 0.20f),
+        outlineVariant = blend(themed.outlineVariant, if (dark) 0.28f else 0.30f),
+        surfaceContainerLowest = blend(themed.surfaceContainerLowest, if (dark) 0.18f else 0.16f),
+        surfaceContainerLow = blend(themed.surfaceContainerLow, if (dark) 0.22f else 0.20f),
+        surfaceContainer = blend(themed.surfaceContainer, if (dark) 0.26f else 0.24f),
+        surfaceContainerHigh = blend(themed.surfaceContainerHigh, if (dark) 0.30f else 0.28f),
+        surfaceContainerHighest = blend(themed.surfaceContainerHighest, if (dark) 0.34f else 0.32f),
+    )
+}
+
 @Composable
 fun ParcelTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    accent: ParcelAccent = ParcelAccent.FOREST,
     content: @Composable () -> Unit,
 ) {
-    val colors = if (darkTheme) DarkColors else LightColors
+    val colors = (if (darkTheme) DarkColors else LightColors).withAccent(accent, darkTheme)
     val view = LocalView.current
 
     if (!view.isInEditMode) {
@@ -118,9 +150,13 @@ fun statusColor(status: OrderStatus): Color {
     return when (status) {
         OrderStatus.UPCOMING -> if (dark) UpcomingDark else UpcomingLight
         OrderStatus.SHIPPED -> if (dark) ShippedDark else ShippedLight
+        OrderStatus.DELAYED -> if (dark) DelayedDark else DelayedLight
+        OrderStatus.READY_FOR_PICKUP -> if (dark) PickupDark else PickupLight
         OrderStatus.OUT_FOR_DELIVERY -> if (dark) OutForDeliveryDark else OutForDeliveryLight
+        OrderStatus.DELIVERY_FAILED -> if (dark) DeliveryFailedDark else DeliveryFailedLight
         OrderStatus.DELIVERED -> if (dark) DeliveredDark else DeliveredLight
         OrderStatus.CANCELLED -> if (dark) CancelledDark else CancelledLight
+        OrderStatus.RETURNED -> if (dark) ReturnedDark else ReturnedLight
     }
 }
 

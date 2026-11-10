@@ -48,8 +48,12 @@ object Dates {
     fun statusLabel(status: OrderStatus): String = when (status) {
         OrderStatus.UPCOMING -> "Scheduled"
         OrderStatus.SHIPPED -> "Shipped"
+        OrderStatus.DELAYED -> "Delayed"
+        OrderStatus.READY_FOR_PICKUP -> "Ready for pickup"
         OrderStatus.OUT_FOR_DELIVERY -> "Out for delivery"
+        OrderStatus.DELIVERY_FAILED -> "Delivery failed"
         OrderStatus.DELIVERED -> "Delivered"
         OrderStatus.CANCELLED -> "Cancelled"
+        OrderStatus.RETURNED -> "Returned to sender"
     }
 }

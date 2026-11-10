@@ -39,7 +39,8 @@ class MainActivity : ComponentActivity() {
         handleShareIntent(intent)
 
         setContent {
-            ParcelTheme {
+            val settings by viewModel.settings.collectAsStateWithLifecycle()
+            ParcelTheme(accent = settings.accent) {
                 val ready by viewModel.ready.collectAsStateWithLifecycle()
                 if (ready) {
                     ParcelAppRoot(viewModel = viewModel)

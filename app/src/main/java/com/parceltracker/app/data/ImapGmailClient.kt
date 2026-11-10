@@ -1,5 +1,6 @@
 package com.parceltracker.app.data
 
+import com.sun.mail.imap.IMAPFolder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
@@ -55,13 +56,7 @@ class ImapGmailClient {
         withStore(email, appPassword) { store ->
             val folder = openMailFolder(store)
             try {
-                val since = Date.from(
-                    LocalDate.now()
-                        .minusDays(scanDays.toLong())
-                        .atStartOfDay(ZoneId.systemDefault())
-                        .toInstant(),
-                )
-                val messages = folder.search(buildSearchTerm(since))
+                val messages = searchMessages(folder, scanDays)
                 if (messages.isEmpty()) return@withStore emptyList()
 
                 val profile = FetchProfile().apply {
@@ -111,6 +106,7 @@ class ImapGmailClient {
         email: String,
         appPassword: String,
         refs: List<MessageRef>,
+        onProgress: (read: Int, total: Int) -> Unit = { _, _ -> },
     ): List<GmailMessage> = withContext(Dispatchers.IO) {
         if (refs.isEmpty()) return@withContext emptyList()
 
@@ -118,13 +114,26 @@ class ImapGmailClient {
             val folder = openMailFolder(store)
             try {
                 val uidFolder = folder as? UIDFolder ?: return@withStore emptyList()
+                val result = mutableListOf<GmailMessage>()
+                var processed = 0
+                val bodyProfile = FetchProfile().apply { add("BODY.PEEK[]") }
 
-                refs.mapNotNull { ref ->
-                    runCatching {
-                        val message = uidFolder.getMessageByUID(ref.uid)
-                            ?: return@mapNotNull null
-                        val body = extractBody(message).take(60_000)
-                        GmailMessage(
+                refs.chunked(20).forEach { chunk ->
+                    val messages = chunk.mapNotNull { ref ->
+                        runCatching {
+                            uidFolder.getMessageByUID(ref.uid)?.let { ref to it }
+                        }.getOrNull()
+                    }
+                    if (messages.isNotEmpty()) {
+                        // One IMAP round-trip for each batch of bodies, instead of one per email.
+                        runCatching {
+                            folder.fetch(messages.map { it.second }.toTypedArray(), bodyProfile)
+                        }
+                    }
+
+                    messages.forEach { (ref, message) ->
+                        val body = runCatching { extractBody(message) }.getOrDefault("").take(60_000)
+                        result += GmailMessage(
                             id = ref.id,
                             threadId = ref.threadId,
                             subject = ref.subject,
@@ -134,8 +143,12 @@ class ImapGmailClient {
                             snippet = HtmlText.normalizeSpace(body).take(220),
                             bodyText = body,
                         )
-                    }.getOrNull()
+                    }
+
+                    processed += chunk.size
+                    onProgress(processed.coerceAtMost(refs.size), refs.size)
                 }
+                result
             } finally {
                 runCatching { folder.close(false) }
             }
@@ -164,7 +177,56 @@ class ImapGmailClient {
         return store.getFolder("INBOX").apply { open(Folder.READ_ONLY) }
     }
 
-    private fun buildSearchTerm(since: Date): SearchTerm {
+    private fun searchMessages(folder: Folder, scanDays: Int): Array<Message> {
+        val imapFolder = folder as? IMAPFolder
+        if (imapFolder != null) {
+            val uids = runCatching { gmailRawSearch(imapFolder, scanDays) }.getOrNull()
+            if (uids != null) {
+                if (uids.isEmpty()) return emptyArray()
+                return (imapFolder as UIDFolder).getMessagesByUID(uids)
+            }
+        }
+        return folder.search(buildSearchTerm(scanDays))
+    }
+
+    /**
+     * Gmail's X-GM-RAW search runs Gmail's native query engine on the server,
+     * avoiding a full client-side scan of the All Mail folder.
+     */
+    private fun gmailRawSearch(folder: IMAPFolder, scanDays: Int): LongArray {
+        val days = scanDays.coerceIn(30, 365)
+        val query = "(category:purchases OR subject:order OR subject:delivery " +
+            "OR subject:shipped OR subject:arriving OR subject:dispatched " +
+            "OR ${OrderEmailParser.HOBBY_STORE_QUERY}) " +
+            "newer_than:${days}d -category:promotions -category:social -category:forums"
+        val escaped = query.replace("\\", "\\\\").replace("\"", "\\\"")
+        var found = LongArray(0)
+
+        folder.doCommand { protocol ->
+            val responses = protocol.command("UID SEARCH X-GM-RAW \"$escaped\"", null)
+            val uids = mutableListOf<Long>()
+            for (response in responses) {
+                val text = response.toString()
+                val idx = text.indexOf("SEARCH", ignoreCase = true)
+                if (idx < 0) continue
+                text.substring(idx + "SEARCH".length)
+                    .trim()
+                    .split(Regex("\\s+"))
+                    .mapNotNullTo(uids) { it.toLongOrNull() }
+            }
+            found = uids.takeLast(500).toLongArray()
+            responses
+        }
+        return found
+    }
+
+    private fun buildSearchTerm(scanDays: Int): SearchTerm {
+        val since = Date.from(
+            LocalDate.now()
+                .minusDays(scanDays.toLong())
+                .atStartOfDay(ZoneId.systemDefault())
+                .toInstant(),
+        )
         val keywords = listOf(
             "order",
             "delivery",

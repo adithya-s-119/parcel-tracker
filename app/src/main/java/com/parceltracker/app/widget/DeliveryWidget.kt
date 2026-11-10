@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.res.Configuration
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -36,6 +37,8 @@ import androidx.glance.unit.ColorProvider
 import com.parceltracker.app.MainActivity
 import com.parceltracker.app.ParcelApp
 import com.parceltracker.app.data.DeliveryOrder
+import com.parceltracker.app.data.ParcelAccent
+import kotlinx.coroutines.flow.first
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
@@ -58,11 +61,14 @@ class DeliveryWidget : GlanceAppWidget() {
                 ?.nextDeliveries(LocalDate.now().toEpochDay(), 6)
                 .orEmpty()
         }.getOrDefault(emptyList())
+        val theme = runCatching {
+            app?.container?.settingsStore?.settings?.first()?.accent
+        }.getOrNull() ?: ParcelAccent.FOREST
 
         provideContent {
             val dark = (LocalContext.current.resources.configuration.uiMode and
                 Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-            WidgetContent(orders = orders, dark = dark)
+            WidgetContent(orders = orders, dark = dark, theme = theme)
         }
     }
 
@@ -74,19 +80,24 @@ class DeliveryWidget : GlanceAppWidget() {
 }
 
 @Composable
-private fun WidgetContent(orders: List<DeliveryOrder>, dark: Boolean) {
-    val background = if (dark) Color(0xFF1D201B) else Color(0xFFFFFCF5)
+private fun WidgetContent(orders: List<DeliveryOrder>, dark: Boolean, theme: ParcelAccent) {
+    val accent = Color(if (dark) theme.darkPrimary else theme.lightPrimary)
+    val tint = Color(if (dark) theme.darkContainer else theme.lightContainer)
+    val background = lerp(
+        if (dark) Color(0xFF1D201B) else Color(0xFFFFFCF5),
+        tint,
+        if (dark) 0.24f else 0.30f,
+    )
     val ink = if (dark) Color(0xFFF2EFE6) else Color(0xFF211F1A)
-    val muted = if (dark) Color(0xFFA8A296) else Color(0xFF7B7466)
-    val accent = if (dark) Color(0xFFA8C9B4) else Color(0xFF2E4B3C)
-    val line = if (dark) Color(0xFF343830) else Color(0xFFE9E1D2)
-    val dateChip = if (dark) Color(0xFF272B24) else Color(0xFFF2EDE1)
+    val muted = if (dark) Color(0xFFC6C0B3) else Color(0xFF6F695D)
+    val line = lerp(background, ink, if (dark) 0.18f else 0.14f)
+    val dateChip = lerp(background, accent, if (dark) 0.20f else 0.14f)
 
     val today = LocalDate.now()
     val maxRows = when {
         LocalSize.current.height < 150.dp -> 2
         LocalSize.current.height < 200.dp -> 3
-        else -> 5
+        else -> 3
     }
     val visible = orders.take(maxRows)
 
@@ -107,7 +118,7 @@ private fun WidgetContent(orders: List<DeliveryOrder>, dark: Boolean) {
                     text = "NEXT DELIVERIES",
                     style = TextStyle(
                         color = ColorProvider(accent),
-                        fontSize = 10.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                     ),
                 )
@@ -116,7 +127,7 @@ private fun WidgetContent(orders: List<DeliveryOrder>, dark: Boolean) {
                     text = "PARCEL",
                     style = TextStyle(
                         color = ColorProvider(muted),
-                        fontSize = 9.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
                     ),
                 )
@@ -137,18 +148,19 @@ private fun WidgetContent(orders: List<DeliveryOrder>, dark: Boolean) {
                     text = "Nothing on the way",
                     style = TextStyle(
                         color = ColorProvider(ink),
-                        fontSize = 15.sp,
+                        fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                     ),
                 )
-                Spacer(modifier = GlanceModifier.height(3.dp))
+                Spacer(modifier = GlanceModifier.height(4.dp))
                 Text(
                     text = "Your next deliveries will appear here.",
-                    style = TextStyle(color = ColorProvider(muted), fontSize = 11.sp),
+                    style = TextStyle(color = ColorProvider(muted), fontSize = 13.sp),
                     maxLines = 2,
                 )
                 Spacer(modifier = GlanceModifier.defaultWeight())
             } else {
+                Spacer(modifier = GlanceModifier.defaultWeight())
                 visible.forEachIndexed { index, order ->
                     WidgetRow(
                         order = order,
@@ -159,9 +171,10 @@ private fun WidgetContent(orders: List<DeliveryOrder>, dark: Boolean) {
                         dateChip = dateChip,
                     )
                     if (index < visible.lastIndex) {
-                        Spacer(modifier = GlanceModifier.height(3.dp))
+                        Spacer(modifier = GlanceModifier.height(6.dp))
                     }
                 }
+                Spacer(modifier = GlanceModifier.defaultWeight())
             }
         }
     }
@@ -178,15 +191,15 @@ private fun WidgetRow(
 ) {
     val date = order.promisedDate
     Row(
-        modifier = GlanceModifier.fillMaxWidth().padding(vertical = 2.dp),
+        modifier = GlanceModifier.fillMaxWidth().padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             modifier = GlanceModifier
-                .width(42.dp)
-                .height(30.dp)
+                .width(50.dp)
+                .height(40.dp)
                 .background(dateChip)
-                .cornerRadius(8.dp),
+                .cornerRadius(11.dp),
             contentAlignment = Alignment.Center,
         ) {
             if (date != null) {
@@ -195,26 +208,26 @@ private fun WidgetRow(
                         text = date.dayOfMonth.toString(),
                         style = TextStyle(
                             color = ColorProvider(ink),
-                            fontSize = 14.sp,
+                            fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
                         ),
                     )
                     Text(
                         text = date.month.name.take(3),
-                        style = TextStyle(color = ColorProvider(muted), fontSize = 8.sp),
+                        style = TextStyle(color = ColorProvider(muted), fontSize = 11.sp),
                     )
                 }
             }
         }
 
-        Spacer(modifier = GlanceModifier.width(9.dp))
+        Spacer(modifier = GlanceModifier.width(10.dp))
 
         Column(modifier = GlanceModifier.defaultWeight()) {
             Text(
                 text = order.merchant.uppercase(Locale.getDefault()),
                 style = TextStyle(
                     color = ColorProvider(accent),
-                    fontSize = 9.sp,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                 ),
                 maxLines = 1,
@@ -223,7 +236,7 @@ private fun WidgetRow(
                 text = order.itemName,
                 style = TextStyle(
                     color = ColorProvider(ink),
-                    fontSize = 12.sp,
+                    fontSize = 17.sp,
                     fontWeight = FontWeight.Medium,
                 ),
                 maxLines = 1,
@@ -234,7 +247,7 @@ private fun WidgetRow(
 
         Text(
             text = relativeLabel(date, today),
-            style = TextStyle(color = ColorProvider(muted), fontSize = 10.sp),
+            style = TextStyle(color = ColorProvider(muted), fontSize = 13.sp),
             maxLines = 1,
         )
     }

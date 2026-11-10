@@ -313,6 +313,7 @@ private fun MainScaffold(
                     onAutoSync = viewModel::setAutoSync,
                     onNotifications = viewModel::setNotificationsEnabled,
                     onScanDays = viewModel::setScanDays,
+                    onAccent = viewModel::setAccent,
                     onRebuild = { viewModel.syncNow(fullRescan = true, announce = true) },
                     onDeleteAll = viewModel::deleteAllData,
                     onAdd = { editorTarget = EditorTarget(null, LocalDate.now()) },

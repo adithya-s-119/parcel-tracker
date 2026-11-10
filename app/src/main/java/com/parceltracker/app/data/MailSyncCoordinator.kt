@@ -10,6 +10,7 @@ import kotlinx.coroutines.sync.withLock
  */
 class MailSyncCoordinator(
     private val settingsStore: SettingsStore,
+    private val dao: OrderDao,
     private val oauthSync: GmailSyncManager,
     private val imapSync: ImapSyncManager,
     private val smsSync: SmsSyncManager,
@@ -22,6 +23,14 @@ class MailSyncCoordinator(
         progress: (String) -> Unit = {},
     ): SyncResult = mutex.withLock {
         val settings = settingsStore.settings.first()
+
+        if (fullRescan) {
+            // A rebuild must start from a clean slate for every source, so an
+            // old SMS update can't be merged into a stale duplicate row.
+            progress("Clearing previous results.")
+            dao.deleteAllImportedOrders()
+            dao.clearScannedEmails()
+        }
 
         val mailResult = when (settings.authMode) {
             AuthMode.OAUTH -> oauthSync.sync(fullRescan, progress)

@@ -9,6 +9,7 @@ import java.security.MessageDigest
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.util.Locale
 
 /**
  * Reads delivery-related SMS from the device inbox and parses promising dates.
@@ -40,6 +41,10 @@ class SmsSyncManager(
             )
         }
 
+        progress("Cleaning old texts…")
+        dao.deleteStaleSmsOrders(LocalDate.now().minusDays(30).toEpochDay())
+        dao.deletePromotionalSmsOrders()
+
         progress("Reading delivery texts…")
         val rows = try {
             withContext(Dispatchers.IO) { readInbox(settings.scanDays) }
@@ -60,11 +65,19 @@ class SmsSyncManager(
                 OrderEmailParser.parseSms(row.address, row.body, row.date)
             }.getOrNull()
 
-            if (parsed != null) {
+            if (parsed != null && !isPromotional(row.address, row.body) && isUsefulSms(parsed)) {
                 val merchant = merchantFor(parsed, row)
-                val itemName = parsed.itemName ?: row.body.take(90)
-                val order = parsed.copy(merchant = merchant, itemName = itemName)
-                when (repository.mergeGmail(order, row.id, row.threadId, row.epochMillis, source = "SMS")) {
+                val order = parsed.copy(merchant = merchant)
+                when (
+                    repository.mergeGmail(
+                        order,
+                        row.id,
+                        row.threadId,
+                        row.epochMillis,
+                        source = "SMS",
+                        fallbackItem = row.body.take(90),
+                    )
+                ) {
                     OrderRepository.MergeResult.INSERTED -> tracked++
                     OrderRepository.MergeResult.UPDATED -> updated++
                     OrderRepository.MergeResult.IGNORED -> Unit
@@ -112,6 +125,10 @@ class SmsSyncManager(
             dao.markScanned(listOf(ScannedEmail(id)))
             return
         }
+        if (isPromotional(address, body) || !isUsefulSms(parsed)) {
+            dao.markScanned(listOf(ScannedEmail(id)))
+            return
+        }
 
         val row = SmsRow(
             id = id,
@@ -122,13 +139,13 @@ class SmsSyncManager(
             threadId = "sms-thread-$id",
         )
         val merchant = merchantFor(parsed, row)
-        val itemName = parsed.itemName ?: body.take(90)
         repository.mergeGmail(
-            parsed.copy(merchant = merchant, itemName = itemName),
+            parsed.copy(merchant = merchant),
             row.id,
             row.threadId,
             row.epochMillis,
             source = "SMS",
+            fallbackItem = body.take(90),
         )
         dao.markScanned(listOf(ScannedEmail(row.id)))
         onDataChanged()
@@ -207,6 +224,32 @@ class SmsSyncManager(
         }
         rows
     }.getOrDefault(emptyList())
+
+    private fun isUsefulSms(parsed: OrderEmailParser.ParsedOrder): Boolean {
+        val terminal = parsed.status == OrderStatus.DELIVERED ||
+            parsed.status == OrderStatus.CANCELLED ||
+            parsed.status == OrderStatus.RETURNED
+        if (parsed.promisedDate == null) return terminal
+        if (!terminal && parsed.promisedDate.isBefore(LocalDate.now().minusDays(14))) {
+            return false
+        }
+        return true
+    }
+
+    private fun isPromotional(address: String, body: String): Boolean {
+        if (address.trim().uppercase(Locale.ENGLISH).endsWith("-P")) return true
+
+        val lower = body.lowercase(Locale.ENGLISH)
+        val promo = Regex(
+            "(?i)\\b(offer|discount|sale|coupon|promo|free delivery|valid till|valid until|t&c|terms and conditions|unsubscribe|book now|shop now|voucher|cashback|deal|% off|save \\d)\\b",
+        ).containsMatchIn(lower)
+        if (!promo) return false
+
+        val strongDelivery = Regex(
+            "(?i)\\b(out for delivery|delivered|delivery attempt|arriving (?:today|tomorrow)|has been shipped|dispatched|ready for pickup|returned to sender)\\b",
+        ).containsMatchIn(lower)
+        return !strongDelivery
+    }
 
     private fun merchantFor(
         parsed: OrderEmailParser.ParsedOrder,

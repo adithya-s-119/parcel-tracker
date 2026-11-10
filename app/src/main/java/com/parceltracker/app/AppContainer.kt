@@ -54,6 +54,7 @@ class AppContainer(context: Context) {
 
     val syncManager = MailSyncCoordinator(
         settingsStore = settingsStore,
+        dao = database.orderDao(),
         oauthSync = oauthSyncManager,
         imapSync = imapSyncManager,
         smsSync = smsSyncManager,

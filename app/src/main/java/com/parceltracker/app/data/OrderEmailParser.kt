@@ -83,8 +83,19 @@ object OrderEmailParser {
     private val orderPatterns = listOf(
         Regex("(?i)\\border\\s*(?:id|no\\.?|number|#)\\s*[:#\\-]?\\s*([A-Z0-9][A-Z0-9\\-]{5,35})"),
         Regex("(?i)\\b(?:order|reference)\\s*[:#\\-]\\s*([A-Z0-9][A-Z0-9\\-]{5,35})"),
+        Regex("(?i)\\border\\s+([A-Z0-9][A-Z0-9\\-]{5,35})"),
         Regex("\\b\\d{3}-\\d{7}-\\d{7}\\b"),
         Regex("(?i)\\bOD\\d{10,}\\b"),
+        // Courier updates such as "Item: CL657613435IN is out for delivery",
+        // "Article No: JD591470963IN has been booked" or "PARCEL No: ...".
+        Regex("(?i)\\b(?:item|parcel|article|shipment|consignment|docket|awb|tracking)\\s*(?:no\\.?|number|id|#)?\\s*[:#\\-]?\\s*([A-Z0-9]{8,30})\\b"),
+        // Courier messages may contain the keyword inside a code such as
+        // "SP_INLAND_PARCEL No: JD591470963IN", so no word boundary here.
+        Regex("(?i)(?:parcel|article|consignment|shipment|docket|awb)\\s+(?:no\\.?|number|id|#)\\s*[:#\\-]?\\s*([A-Z0-9]{8,30})"),
+        // "7D135079572 is delivered", "CL657613276IN was out for delivery".
+        Regex("(?i)\\b([A-Z0-9]{8,30})\\s+(?:is|has been|was)\\s+(?:out for delivery|delivered|booked|shipped|dispatched)\\b"),
+        Regex("\\b(7D\\d{9})\\b"),
+        Regex("(?i)\\b(SF\\d{8,})\\b"),
     )
 
     private val trackingPattern = Regex(
@@ -100,6 +111,21 @@ object OrderEmailParser {
         Regex("(?i)\\bqty\\s*[:\\-]?\\s*\\d+\\s*[x×]\\s*(.{3,100})"),
         Regex("(?i)\\b(?:1|one) (?:item|product)\\s*[:\\-]\\s*(.{3,100})"),
     )
+
+    /** Hobby/electronics stores whose order mail should always be scanned. */
+    val HOBBY_STORE_DOMAINS = listOf(
+        "robu.in",
+        "robocraze.com",
+        "hubtronics.in",
+        "xcluma.com",
+        "probots.co.in",
+        "sharvielectronics.com",
+        "flyrobo.in",
+        "robokits.co.in",
+        "thinkrobotics.in",
+        "rhydolabz.com",
+    )
+    val HOBBY_STORE_QUERY = HOBBY_STORE_DOMAINS.joinToString(" OR ") { "from:$it" }
 
     private val knownMerchants = listOf(
         "amazon" to "Amazon",
@@ -135,6 +161,16 @@ object OrderEmailParser {
         "fedex" to "FedEx",
         "usps" to "USPS",
         "dhl" to "DHL",
+        "robu.in" to "Robu",
+        "robocraze" to "Robocraze",
+        "hubtronics" to "Hubtronics",
+        "xcluma" to "Xcluma",
+        "probots" to "Probots",
+        "sharvielectronics" to "Sharvie Electronics",
+        "flyrobo" to "FlyRobo",
+        "robokits" to "Robokits",
+        "thinkrobotics" to "ThinkRobotics",
+        "rhydolabz" to "RhydoLABZ",
     )
 
     private val carriers = listOf(
@@ -216,6 +252,15 @@ object OrderEmailParser {
             "(?i)\\b(order confirmation|order confirmed|thank you for your order|your order|your package|your shipment|order (?:#|no\\.?|number)|order id|has (?:been )?shipped|has (?:been )?delivered|was delivered|out for delivery|will be delivered|arriving|scheduled to arrive|on its way|dispatched)\\b",
         ).containsMatchIn("${message.subject}\n${body.take(6_000)}")
 
+        if (relaxed) {
+            val deliveryEvidence = Regex(
+                "(?i)\\b(deliver(?:y|ed|ing)?|out for delivery|arriv(?:e|es|ing)|ship(?:ped|ping|s)?|dispatch(?:ed)?|courier|package|parcel|tracking|awb|consignment|pickup|collect|returned to sender)\\b",
+            ).containsMatchIn("${message.subject}\n${body.take(6_000)}")
+            if (!deliveryEvidence) return null
+        } else if (looksPromotional(message, combined, orderNumber)) {
+            return null
+        }
+
         val hasOrderCue = orderNumber != null
         val hasDate = promisedDate != null
         val isOrderEmail = if (relaxed) {
@@ -245,6 +290,32 @@ object OrderEmailParser {
             snippet = HtmlText.normalizeSpace(body).take(220),
             emailDate = message.receivedDate,
         )
+    }
+
+    private fun looksPromotional(
+        message: GmailMessage,
+        combined: String,
+        orderNumber: String?,
+    ): Boolean {
+        val lower = combined.lowercase(Locale.ENGLISH)
+        val transactional = orderNumber != null ||
+            Regex(
+                "(?i)\\b(order\\s*(?:#|no\\.?|number|id)|tracking\\s*(?:id|number|no\\.?)|out for delivery|(?:has been|was|is) delivered|has been shipped|delivery attempt|ready for pickup|returned to sender)\\b",
+            ).containsMatchIn(lower)
+
+        if (transactional) return false
+
+        val promoBody = Regex(
+            "(?i)\\b(unsubscribe|view in browser|shop now|buy now|sale|%\\s*off|discount|coupon|promo code|offer ends|last chance|deal of the day|free delivery on orders|newsletter|save up to|clearance|prime day|great indian festival)\\b",
+        ).containsMatchIn(lower)
+        val promoSubject = Regex(
+            "(?i)\\b(sale|offer|discount|coupon|deal|clearance|prime day|festival|newsletter|recommended|suggestions|new arrivals|save up to|last chance)\\b",
+        ).containsMatchIn(message.subject.lowercase(Locale.ENGLISH))
+        val promoFrom = Regex(
+            "(?i)(deals?|promo|newsletter|marketing|offers?|store-news|recommendations?|suggestions?|campaign)@",
+        ).containsMatchIn(message.from.lowercase(Locale.ENGLISH))
+
+        return promoBody || promoSubject || promoFrom
     }
 
     private fun extractDeliveryDate(
@@ -464,37 +535,125 @@ object OrderEmailParser {
     private fun detectStatus(subject: String, body: String): OrderStatus {
         val subjectLower = subject.lowercase(Locale.ENGLISH).trim()
         val bodyLower = body.lowercase(Locale.ENGLISH).take(8_000)
-        val all = "$subjectLower\n$bodyLower"
+        val statusBody = bodyLower.take(2_000)
 
-        val cancelled = subjectLower.startsWith("cancelled") ||
-            subjectLower.startsWith("canceled") ||
-            Regex(
-                "(?i)\\b(order|item|shipment|delivery)\\b[^.]{0,80}\\b(?:has been|was|is|got) (?:cancelled|canceled)\\b",
-            ).containsMatchIn(bodyLower) ||
+        // Subjects like "Ordered:", "Shipped:", "Delivered:" describe the event
+        // this email is about. Their bodies often contain the whole progress
+        // timeline ("ordered -> shipped -> out for delivery -> delivered"), so
+        // trust the subject before looking at body text.
+        explicitSubjectStatus(subjectLower)?.let { return it }
+
+        val cancelled = Regex(
+            "(?i)\\b(order|item|shipment|delivery)\\b[^.]{0,80}\\b(?:has been|was|is|got) (?:cancelled|canceled)\\b",
+        ).containsMatchIn(bodyLower) ||
             Regex("(?i)\\b(?:cancelled|canceled) (?:your|the) order\\b").containsMatchIn(bodyLower)
-
         if (cancelled) return OrderStatus.CANCELLED
-        if (Regex("(?i)\\bout for delivery\\b").containsMatchIn(all)) {
-            return OrderStatus.OUT_FOR_DELIVERY
+
+        val failed = Regex(
+            "(?i)\\b(delivery attempt (?:failed|unsuccessful)|attempted delivery|delivery failed|failed delivery|unable to deliver|could not deliver|couldn't deliver|recipient (?:not available|unavailable)|delivery was not possible)\\b",
+        )
+        if (failed.containsMatchIn(statusBody)) return OrderStatus.DELIVERY_FAILED
+
+        if (Regex("(?i)\\bdelivery attempt\\b[^.\\n]{0,60}\\bsuccess(?:ful|fully)?\\b")
+                .containsMatchIn(statusBody)
+        ) {
+            return OrderStatus.DELIVERED
         }
 
-        val deliveredSubject = subjectLower.startsWith("delivered") ||
-            Regex(
-                "(?i)\\b(your )?(package|order|item|shipment|delivery)\\b[^.!\\n]{0,80}\\b(?:was|has been|is) delivered\\b",
-            ).containsMatchIn(subjectLower)
+        val returned = Regex(
+            "(?i)\\b(returned to sender|return to sender|returned to (?:the )?(?:seller|store|origin|us))\\b",
+        )
+        if (returned.containsMatchIn(statusBody)) return OrderStatus.RETURNED
+
+        val delayed = Regex(
+            "(?i)\\b(your )?(order|delivery|package|shipment)\\b[^.!\\n]{0,60}\\b(?:is|has been) delayed\\b",
+        )
+        if (delayed.containsMatchIn(statusBody)) return OrderStatus.DELAYED
+
+        val pickup = Regex(
+            "(?i)\\b(ready for (?:pickup|collection)|available for pickup|awaiting pickup|collect (?:your|the) package)\\b",
+        )
+        if (pickup.containsMatchIn(statusBody)) return OrderStatus.READY_FOR_PICKUP
+
         val deliveredBody = Regex(
-            "(?i)\\b(?:has been|was|is|successfully) delivered\\b|\\bdelivered successfully\\b|\\bdelivery successful\\b|\\bdelivered on\\b",
-        ).containsMatchIn(bodyLower)
+            "(?i)\\b(?:order|package|parcel|shipment|item|delivery)\\b[^.!\\n]{0,80}\\b(?:has been|was|is|got)\\s+(?:successfully\\s+)?delivered\\b|\\bdelivered successfully\\b|\\bdelivery successful\\b|\\bdelivered on\\b",
+        ).containsMatchIn(statusBody)
+        if (deliveredBody) return OrderStatus.DELIVERED
 
-        if (deliveredSubject || deliveredBody) return OrderStatus.DELIVERED
+        // Only treat "out for delivery" as a live status when it is stated
+        // about this order, not when it appears as one step in a timeline.
+        val outForDelivery = Regex(
+            "(?i)\\b(?:is|now|currently|will be)\\s+out for delivery\\b|" +
+                "\\bout for delivery (?:today|now|soon)\\b|" +
+                "\\byour (?:order|package|parcel|shipment|item|delivery)\\b[^.!\\n]{0,60}\\bout for delivery\\b",
+        ).containsMatchIn(statusBody)
+        if (outForDelivery) return OrderStatus.OUT_FOR_DELIVERY
 
-        if (Regex("(?i)\\b(shipped|dispatched|on its way|in transit|handed over to|picked up by)\\b")
-                .containsMatchIn(all)
+        if (Regex("(?i)\\b(your )?(order|package|parcel|shipment|item|delivery)\\b[^.!\\n]{0,60}\\b(shipped|dispatched|on its way|in transit|handed over to|picked up by)\\b")
+                .containsMatchIn(statusBody) ||
+            Regex("(?i)\\bhas (?:been )?shipped\\b|\\bhas (?:been )?dispatched\\b")
+                .containsMatchIn(statusBody)
         ) {
             return OrderStatus.SHIPPED
         }
 
         return OrderStatus.UPCOMING
+    }
+
+    /** Reads the status directly from a transactional subject line. */
+    private fun explicitSubjectStatus(subjectLower: String): OrderStatus? {
+        val subject = subjectLower.trimStart()
+
+        if (Regex("(?i)^(?:cancelled|canceled)\\b").containsMatchIn(subject) ||
+            Regex("(?i)\\b(?:order|item|shipment|delivery)\\b[^.!\\n]{0,60}\\b(?:has been|was|is) (?:cancelled|canceled)\\b")
+                .containsMatchIn(subject)
+        ) {
+            return OrderStatus.CANCELLED
+        }
+        if (Regex("(?i)\\b(returned to sender|return to sender)\\b").containsMatchIn(subject)) {
+            return OrderStatus.RETURNED
+        }
+        if (Regex("(?i)^(?:delivered|successfully delivered|delivery successful)\\b|\\b(?:order|package|parcel|shipment|item|delivery)\\b[^.!\\n]{0,80}\\b(?:was|has been|is|got)\\s+(?:successfully\\s+)?delivered(?:\\s+successfully)?\\b")
+                .containsMatchIn(subject)
+        ) {
+            return OrderStatus.DELIVERED
+        }
+        if (Regex("(?i)\\b(delivery attempt (?:failed|unsuccessful)|attempted delivery|delivery failed|failed delivery|unable to deliver|could not deliver)\\b")
+                .containsMatchIn(subject)
+        ) {
+            return OrderStatus.DELIVERY_FAILED
+        }
+        if (Regex("(?i)\\bdelivery attempt\\b[^.\\n]{0,60}\\bsuccess(?:ful|fully)?\\b")
+                .containsMatchIn(subject)
+        ) {
+            return OrderStatus.DELIVERED
+        }
+        if (Regex("(?i)^(?:out for delivery|arriving today)\\b|\\b(?:package|parcel|shipment|order|item)\\b[^.!\\n]{0,50}\\bout for delivery\\b")
+                .containsMatchIn(subject)
+        ) {
+            return OrderStatus.OUT_FOR_DELIVERY
+        }
+        if (Regex("(?i)^(?:shipped|dispatched|arriving)\\b|\\b(?:order|package|parcel|shipment|item|delivery)\\b[^.!\\n]{0,60}\\b(?:has been |was )?(?:shipped|dispatched)\\b")
+                .containsMatchIn(subject)
+        ) {
+            return OrderStatus.SHIPPED
+        }
+        if (Regex("(?i)\\b(delayed|running late|rescheduled|delivery date has changed|new delivery date)\\b")
+                .containsMatchIn(subject)
+        ) {
+            return OrderStatus.DELAYED
+        }
+        if (Regex("(?i)\\b(ready for (?:pickup|collection)|available for pickup|awaiting pickup)\\b")
+                .containsMatchIn(subject)
+        ) {
+            return OrderStatus.READY_FOR_PICKUP
+        }
+        if (Regex("(?i)^(?:ordered|order placed|order confirmed|order received|thanks for your order)\\b|\\b(your )?order\\b[^.!\\n]{0,40}\\b(?:is )?confirmed\\b")
+                .containsMatchIn(subject)
+        ) {
+            return OrderStatus.UPCOMING
+        }
+        return null
     }
 
     private fun extractOrderNumber(text: String): String? {
@@ -531,7 +690,38 @@ object OrderEmailParser {
             val match = pattern.find(searchSpace) ?: continue
             cleanItem(match.groupValues[1])?.let { return it }
         }
-        return null
+        // Amazon-style subjects truncate the product name ("Delivered:
+        // “Some product...”"). If the body contains the beginning of that
+        // name, take the full title from the body instead.
+        return expandTruncatedSubjectItem(subject, body)
+    }
+
+    private fun expandTruncatedSubjectItem(subject: String, body: String): String? {
+        val quoted = Regex("[\\\"“]([^\\\"”]{6,120}?)(?:\\.\\.\\.|…)?[\\\"”]")
+            .find(subject)
+            ?.groupValues
+            ?.get(1)
+            ?.trim()
+            ?: return null
+        val stem = quoted.removeSuffix("...").removeSuffix("…").trim()
+        if (stem.length < 8) return null
+
+        val index = body.indexOf(stem, ignoreCase = true)
+        if (index < 0) return null
+
+        var candidate = body.substring(index).take(250)
+        candidate = candidate.substringBefore('\n').substringBefore('\r')
+        candidate = candidate
+            .substringBefore("Quantity")
+            .substringBefore("Qty")
+            .substringBefore("Sold by")
+            .substringBefore("Order #")
+            .substringBefore("Order ID")
+            .substringBefore('|')
+            .trim()
+
+        val cleaned = cleanItem(candidate) ?: return null
+        return cleaned.takeIf { it.length > quoted.length }
     }
 
     private fun cleanItem(raw: String): String? {

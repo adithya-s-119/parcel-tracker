@@ -29,6 +29,7 @@ data class AppSettings(
     val lastSyncAt: Long = 0L,
     val lastSyncSummary: String? = null,
     val authNeeded: Boolean = false,
+    val accent: ParcelAccent = ParcelAccent.FOREST,
 )
 
 class SettingsStore(private val context: Context) {
@@ -44,6 +45,7 @@ class SettingsStore(private val context: Context) {
         val LAST_SYNC_AT = longPreferencesKey("last_sync_at")
         val LAST_SYNC_SUMMARY = stringPreferencesKey("last_sync_summary")
         val AUTH_NEEDED = booleanPreferencesKey("auth_needed")
+        val ACCENT = stringPreferencesKey("accent_theme")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data
@@ -67,6 +69,7 @@ class SettingsStore(private val context: Context) {
                 lastSyncAt = prefs[Keys.LAST_SYNC_AT] ?: 0L,
                 lastSyncSummary = prefs[Keys.LAST_SYNC_SUMMARY],
                 authNeeded = prefs[Keys.AUTH_NEEDED] ?: false,
+                accent = ParcelAccent.from(prefs[Keys.ACCENT]),
             )
         }
         .distinctUntilChanged()
@@ -102,6 +105,10 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setScanDays(days: Int) {
         context.dataStore.edit { it[Keys.SCAN_DAYS] = days }
+    }
+
+    suspend fun setAccent(accent: ParcelAccent) {
+        context.dataStore.edit { it[Keys.ACCENT] = accent.name }
     }
 
     suspend fun setLastSync(at: Long, summary: String?) {
