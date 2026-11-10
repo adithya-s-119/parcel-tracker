@@ -20,6 +20,7 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 
 data class AppSettings(
     val accountEmail: String? = null,
+    val authMode: AuthMode = AuthMode.NONE,
     val onboardingComplete: Boolean = false,
     val autoSync: Boolean = true,
     val notificationsEnabled: Boolean = true,
@@ -33,6 +34,7 @@ class SettingsStore(private val context: Context) {
 
     private object Keys {
         val ACCOUNT_EMAIL = stringPreferencesKey("account_email")
+        val AUTH_MODE = stringPreferencesKey("auth_mode")
         val ONBOARDING_COMPLETE = booleanPreferencesKey("onboarding_complete")
         val AUTO_SYNC = booleanPreferencesKey("auto_sync")
         val NOTIFICATIONS = booleanPreferencesKey("notifications")
@@ -47,8 +49,14 @@ class SettingsStore(private val context: Context) {
             if (error is IOException) emit(emptyPreferences()) else throw error
         }
         .map { prefs ->
+            val email = prefs[Keys.ACCOUNT_EMAIL]
+            val authMode = prefs[Keys.AUTH_MODE]
+                ?.let { stored -> runCatching { AuthMode.valueOf(stored) }.getOrNull() }
+                ?: if (email != null) AuthMode.OAUTH else AuthMode.NONE
+
             AppSettings(
-                accountEmail = prefs[Keys.ACCOUNT_EMAIL],
+                accountEmail = email,
+                authMode = authMode,
                 onboardingComplete = prefs[Keys.ONBOARDING_COMPLETE] ?: false,
                 autoSync = prefs[Keys.AUTO_SYNC] ?: true,
                 notificationsEnabled = prefs[Keys.NOTIFICATIONS] ?: true,
@@ -63,6 +71,13 @@ class SettingsStore(private val context: Context) {
     suspend fun setAccount(email: String?) {
         context.dataStore.edit { prefs ->
             if (email == null) prefs.remove(Keys.ACCOUNT_EMAIL) else prefs[Keys.ACCOUNT_EMAIL] = email
+        }
+    }
+
+    suspend fun setAuthMode(mode: AuthMode) {
+        context.dataStore.edit { prefs ->
+            if (mode == AuthMode.NONE) prefs.remove(Keys.AUTH_MODE)
+            else prefs[Keys.AUTH_MODE] = mode.name
         }
     }
 
@@ -97,6 +112,7 @@ class SettingsStore(private val context: Context) {
     suspend fun clearAccount() {
         context.dataStore.edit { prefs ->
             prefs.remove(Keys.ACCOUNT_EMAIL)
+            prefs.remove(Keys.AUTH_MODE)
             prefs[Keys.AUTH_NEEDED] = false
         }
     }
