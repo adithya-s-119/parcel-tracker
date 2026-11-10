@@ -2,11 +2,13 @@ package com.parceltracker.app.ui
 
 import android.app.Application
 import android.content.IntentSender
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.android.gms.auth.api.identity.AuthorizationResult
 import com.parceltracker.app.ParcelApp
 import com.parceltracker.app.data.AppSettings
+import com.parceltracker.app.data.AuthDiagnostics
 import com.parceltracker.app.data.AuthError
 import com.parceltracker.app.data.DeliveryOrder
 import com.parceltracker.app.data.GmailAuthManager
@@ -61,6 +63,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun connect(onResolution: (IntentSender) -> Unit) {
         if (_syncState.value != SyncUiState.Idle) return
+        if (!AuthDiagnostics.playServicesAvailable(getApplication())) {
+            _authError.value = "Google Play services is not available on this device: " +
+                "${AuthDiagnostics.playServicesStatus(getApplication())}. " +
+                "Gmail sign-in needs a device or emulator with Google Play services."
+            return
+        }
         viewModelScope.launch {
             _authError.value = null
             _syncState.value = SyncUiState.Connecting
@@ -82,6 +90,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
             } catch (error: Exception) {
+                Log.e(TAG, "Gmail authorization request failed", error)
                 _syncState.value = SyncUiState.Idle
                 _authError.value = AuthError.message(error)
             }
@@ -90,11 +99,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun handleAuthorizationResult(result: AuthorizationResult?) {
         if (result == null) {
-            _authError.value = "Sign-in was cancelled."
+            Log.w(TAG, "Authorization returned no result (cancelled or blocked)")
+            _authError.value = "Google sign-in was cancelled. If you didn't cancel it, " +
+                "open Sign-in help to check Play services and the OAuth client."
             return
         }
         if (!container.authManager.acceptResult(result)) {
-            _authError.value = "Sign-in was cancelled."
+            Log.w(TAG, "Authorization result has no access token")
+            _authError.value = "Google sign-in didn't return an access token. " +
+                "Check that the Gmail API is enabled and your account is a test user, then try again."
             return
         }
         val token = result.accessToken
@@ -103,6 +116,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         viewModelScope.launch { finishConnect(token) }
+    }
+
+    fun handleAuthorizationFailure(error: Throwable?) {
+        Log.e(TAG, "Google authorization failed", error)
+        _authError.value = error?.let { AuthError.message(it) }
+            ?: "Google returned an empty sign-in result. Check Google Play services and the OAuth client setup, then try again."
     }
 
     private suspend fun finishConnect(token: String) {
@@ -253,5 +272,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearAuthError() {
         _authError.value = null
+    }
+
+    companion object {
+        private const val TAG = "ParcelAuth"
     }
 }

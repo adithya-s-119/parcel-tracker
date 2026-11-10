@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material.icons.outlined.NotificationsNone
@@ -56,6 +57,7 @@ import androidx.compose.ui.unit.sp
 import com.parceltracker.app.data.AppSettings
 import com.parceltracker.app.ui.Dates
 import com.parceltracker.app.ui.components.GoogleGMark
+import com.parceltracker.app.ui.components.SignInHelpDialog
 import com.parceltracker.app.ui.theme.Forest
 import com.parceltracker.app.ui.theme.PaperBright
 
@@ -76,6 +78,7 @@ fun SettingsScreen(
 ) {
     var showRebuildDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showSignInHelp by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier.fillMaxWidth(),
@@ -246,6 +249,25 @@ fun SettingsScreen(
         }
 
         item {
+            SectionTitle("Help")
+        }
+
+        item {
+            Surface(
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            ) {
+                ActionRow(
+                    icon = Icons.Outlined.Info,
+                    title = "Gmail sign-in help",
+                    subtitle = "Package, SHA-1 and Play services status",
+                    onClick = { showSignInHelp = true },
+                )
+            }
+        }
+
+        item {
             Surface(
                 shape = MaterialTheme.shapes.large,
                 color = MaterialTheme.colorScheme.surface,
@@ -315,6 +337,10 @@ fun SettingsScreen(
                 TextButton(onClick = { showRebuildDialog = false }) { Text("Cancel") }
             },
         )
+    }
+
+    if (showSignInHelp) {
+        SignInHelpDialog(onDismiss = { showSignInHelp = false })
     }
 
     if (showDeleteDialog) {

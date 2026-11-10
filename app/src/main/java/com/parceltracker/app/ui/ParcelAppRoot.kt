@@ -84,15 +84,16 @@ fun ParcelAppRoot(viewModel: MainViewModel) {
     val authLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult(),
     ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val authorizationResult = result.data?.let {
-                runCatching {
-                    Identity.getAuthorizationClient(context).getAuthorizationResultFromIntent(it)
-                }.getOrNull()
+        val parsed = result.data?.let { data ->
+            runCatching {
+                Identity.getAuthorizationClient(context).getAuthorizationResultFromIntent(data)
             }
-            viewModel.handleAuthorizationResult(authorizationResult)
-        } else {
-            viewModel.handleAuthorizationResult(null)
+        }
+        when {
+            parsed?.isSuccess == true -> viewModel.handleAuthorizationResult(parsed.getOrNull())
+            parsed?.isFailure == true -> viewModel.handleAuthorizationFailure(parsed.exceptionOrNull())
+            result.resultCode == Activity.RESULT_OK -> viewModel.handleAuthorizationFailure(null)
+            else -> viewModel.handleAuthorizationResult(null)
         }
     }
 

@@ -81,6 +81,22 @@ Copy the **SHA1** value into the Android OAuth client.
 
 If sign-in shows a `DEVELOPER_ERROR` (code 10), the package name or SHA-1 does not match an Android OAuth client. Fix the client, then reinstall the app.
 
+### "Sign-in was cancelled" troubleshooting
+
+Open **Sign-in help** in the app (on the welcome screen or in Settings). It shows the installed app's package name, real signing SHA-1, and Google Play services status. Check:
+
+1. **Google Play services** is available. Emulators need a **Google Play** system image, and a Google account must be added inside the emulator.
+2. The Android OAuth client uses exactly the package name and SHA-1 shown in the help dialog. Reinstall the APK after changing the client.
+3. **Gmail API** is enabled in the Google Cloud project.
+4. The OAuth consent screen includes the `gmail.readonly` scope and your account is listed as a **test user**.
+5. You did not tap outside the Google account/consent sheet.
+
+The app logs the underlying failure with the tag `ParcelAuth`:
+
+```powershell
+adb logcat -s ParcelAuth
+```
+
 ## Build
 
 ```powershell

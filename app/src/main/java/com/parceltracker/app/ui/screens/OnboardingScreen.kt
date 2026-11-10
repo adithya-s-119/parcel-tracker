@@ -35,6 +35,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
@@ -50,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.parceltracker.app.ui.components.GoogleGMark
 import com.parceltracker.app.ui.components.ParcelWordmark
+import com.parceltracker.app.ui.components.SignInHelpDialog
 import com.parceltracker.app.ui.theme.Forest
 import com.parceltracker.app.ui.theme.PaperBright
 import com.parceltracker.app.ui.theme.Sage
@@ -64,6 +69,7 @@ fun OnboardingScreen(
     onSkip: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
+    var showSignInHelp by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -159,16 +165,33 @@ fun OnboardingScreen(
                 }
             }
 
-            TextButton(
-                onClick = onSkip,
-                enabled = !syncing,
+            Row(
                 modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
+                TextButton(
+                    onClick = onSkip,
+                    enabled = !syncing,
+                ) {
+                    Text(
+                        text = "Browse without Gmail",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = colors.onSurfaceVariant,
+                    )
+                }
                 Text(
-                    text = "Browse without Gmail",
+                    text = "·",
                     style = MaterialTheme.typography.labelLarge,
-                    color = colors.onSurfaceVariant,
+                    color = colors.onSurfaceVariant.copy(alpha = 0.5f),
                 )
+                TextButton(onClick = { showSignInHelp = true }) {
+                    Text(
+                        text = "Sign-in help",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = colors.onSurfaceVariant,
+                    )
+                }
             }
 
             if (!authError.isNullOrBlank()) {
@@ -227,6 +250,10 @@ fun OnboardingScreen(
             }
             Spacer(modifier = Modifier.height(12.dp))
         }
+    }
+
+    if (showSignInHelp) {
+        SignInHelpDialog(onDismiss = { showSignInHelp = false })
     }
 }
 
