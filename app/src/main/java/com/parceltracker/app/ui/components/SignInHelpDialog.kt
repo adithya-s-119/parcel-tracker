@@ -49,8 +49,17 @@ fun SignInHelpDialog(onDismiss: () -> Unit) {
                 )
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
-                    text = "If you use an emulator, it must include Google Play services. " +
-                        "Reinstall the APK after changing the OAuth client.",
+                    text = "If you see a Play services internal error (code 8): update Google " +
+                        "Play services from the Play Store, add a Google account in Android " +
+                        "Settings → Accounts, reboot the device, and try again. Emulators must " +
+                        "use a Google Play system image, not a plain AOSP or Google APIs image.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Reinstall the APK after changing the OAuth client. If it still fails, " +
+                        "capture the log with: adb logcat -s ParcelAuth",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

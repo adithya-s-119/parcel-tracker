@@ -23,7 +23,10 @@ class GmailAuthManager(private val context: Context) {
         data object Unavailable : TokenResult
     }
 
-    suspend fun getToken(accountEmail: String?): TokenResult {
+    suspend fun getToken(
+        accountEmail: String?,
+        uiContext: Context? = null,
+    ): TokenResult {
         val current = cachedToken
         if (!current.isNullOrBlank() && System.currentTimeMillis() < expiresAtMillis - 60_000L) {
             return TokenResult.Success(current)
@@ -36,7 +39,10 @@ class GmailAuthManager(private val context: Context) {
             builder.setAccount(Account(accountEmail, "com.google"))
         }
 
-        val result = Identity.getAuthorizationClient(context).authorize(builder.build()).await()
+        // Google Identity Services expects an Activity context for the account/consent UI.
+        // Background sync falls back to the application context.
+        val clientContext = uiContext ?: context
+        val result = Identity.getAuthorizationClient(clientContext).authorize(builder.build()).await()
 
         return when {
             result.hasResolution() -> {

@@ -34,7 +34,13 @@ object AuthDiagnostics {
         val code = GoogleApiAvailability.getInstance()
             .isGooglePlayServicesAvailable(context)
         return when (code) {
-            ConnectionResult.SUCCESS -> "Available"
+            ConnectionResult.SUCCESS -> {
+                val version = runCatching {
+                    context.packageManager.getPackageInfo("com.google.android.gms", 0).versionName
+                }.getOrNull()
+                if (version.isNullOrBlank()) "Available" else "Available (version $version)"
+            }
+
             ConnectionResult.SERVICE_MISSING -> "Missing (use a device or emulator with Google Play)"
             ConnectionResult.SERVICE_UPDATING -> "Updating"
             ConnectionResult.SERVICE_VERSION_UPDATE_REQUIRED -> "Update required"

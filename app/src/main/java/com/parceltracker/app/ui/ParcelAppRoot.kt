@@ -98,7 +98,7 @@ fun ParcelAppRoot(viewModel: MainViewModel) {
     }
 
     val connect: () -> Unit = {
-        viewModel.connect { intentSender: IntentSender ->
+        viewModel.connect(context) { intentSender: IntentSender ->
             authLauncher.launch(
                 IntentSenderRequest.Builder(intentSender).build(),
             )

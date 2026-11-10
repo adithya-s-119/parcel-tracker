@@ -1,11 +1,13 @@
 package com.parceltracker.app.ui
 
 import android.app.Application
+import android.content.Context
 import android.content.IntentSender
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.android.gms.auth.api.identity.AuthorizationResult
+import com.google.android.gms.common.api.ApiException
 import com.parceltracker.app.ParcelApp
 import com.parceltracker.app.data.AppSettings
 import com.parceltracker.app.data.AuthDiagnostics
@@ -26,6 +28,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 sealed interface SyncUiState {
@@ -61,7 +64,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _events = MutableSharedFlow<UiEvent>(extraBufferCapacity = 8)
     val events = _events.asSharedFlow()
 
-    fun connect(onResolution: (IntentSender) -> Unit) {
+    fun connect(
+        uiContext: Context,
+        onResolution: (IntentSender) -> Unit,
+    ) {
         if (_syncState.value != SyncUiState.Idle) return
         if (!AuthDiagnostics.playServicesAvailable(getApplication())) {
             _authError.value = "Google Play services is not available on this device: " +
@@ -73,7 +79,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _authError.value = null
             _syncState.value = SyncUiState.Connecting
             try {
-                when (val result = container.authManager.getToken(settings.value.accountEmail)) {
+                val result = requestToken(uiContext, settings.value.accountEmail)
+                when (result) {
                     is GmailAuthManager.TokenResult.Success -> {
                         _syncState.value = SyncUiState.Idle
                         finishConnect(result.token)
@@ -93,6 +100,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 Log.e(TAG, "Gmail authorization request failed", error)
                 _syncState.value = SyncUiState.Idle
                 _authError.value = AuthError.message(error)
+            }
+        }
+    }
+
+    private suspend fun requestToken(
+        uiContext: Context,
+        accountEmail: String?,
+    ): GmailAuthManager.TokenResult {
+        return try {
+            container.authManager.getToken(accountEmail, uiContext)
+        } catch (error: ApiException) {
+            // Play services occasionally reports a transient internal error; retry once.
+            if (error.statusCode == 8) {
+                Log.w(TAG, "Play services internal error, retrying authorization once", error)
+                delay(800)
+                container.authManager.getToken(accountEmail, uiContext)
+            } else {
+                throw error
             }
         }
     }
