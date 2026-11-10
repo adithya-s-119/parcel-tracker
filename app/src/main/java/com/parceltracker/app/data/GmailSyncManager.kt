@@ -192,6 +192,7 @@ class GmailSyncManager(
             "-category:promotions -category:social -category:forums " +
             "(category:purchases OR subject:order OR subject:delivery " +
             "OR subject:arriving OR subject:shipped OR subject:dispatched " +
-            "OR ${OrderEmailParser.HOBBY_STORE_QUERY})"
+            "OR ${OrderEmailParser.HOBBY_STORE_QUERY}) " +
+            OrderEmailParser.NON_DELIVERY_QUERY
     }
 }

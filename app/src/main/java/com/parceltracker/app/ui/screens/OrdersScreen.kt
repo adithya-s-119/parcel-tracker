@@ -39,7 +39,12 @@ import com.parceltracker.app.data.OrderStatus
 import com.parceltracker.app.ui.components.EmptyState
 import com.parceltracker.app.ui.components.OrderCard
 import com.parceltracker.app.ui.components.SectionLabel
+import java.time.LocalDate
 import java.util.Locale
+
+/** Active, and either undated or not already past its promised day. */
+private fun DeliveryOrder.isUpcoming(todayEpochDay: Long): Boolean =
+    isActive && (promisedEpochDay == null || promisedEpochDay >= todayEpochDay)
 
 private enum class OrderFilter(val label: String) {
     UPCOMING("Upcoming"),
@@ -56,8 +61,9 @@ fun OrdersScreen(
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var filter by rememberSaveable { mutableStateOf(OrderFilter.UPCOMING) }
+    val todayEpochDay = remember { LocalDate.now().toEpochDay() }
 
-    val filtered = remember(orders, query, filter) {
+    val filtered = remember(orders, query, filter, todayEpochDay) {
         val needle = query.trim().lowercase(Locale.getDefault())
         orders
             .filter { order ->
@@ -68,7 +74,7 @@ fun OrdersScreen(
             }
             .filter { order ->
                 when (filter) {
-                    OrderFilter.UPCOMING -> order.isActive
+                    OrderFilter.UPCOMING -> order.isUpcoming(todayEpochDay)
                     OrderFilter.DELIVERED -> order.status == OrderStatus.DELIVERED
                     OrderFilter.CANCELLED -> order.status == OrderStatus.CANCELLED
                     OrderFilter.ALL -> true
@@ -91,7 +97,9 @@ fun OrdersScreen(
             )
     }
 
-    val activeCount = remember(orders) { orders.count { it.isActive } }
+    val activeCount = remember(orders, todayEpochDay) {
+        orders.count { it.isUpcoming(todayEpochDay) }
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxWidth(),

@@ -127,6 +127,21 @@ object OrderEmailParser {
     )
     val HOBBY_STORE_QUERY = HOBBY_STORE_DOMAINS.joinToString(" OR ") { "from:$it" }
 
+    /** Cinema and event bookings have dates, but they are not deliveries. */
+    val NON_DELIVERY_DOMAINS = listOf(
+        "bookmyshow.com",
+        "pvr.in",
+        "pvrcinemas.com",
+        "inoxmovies.com",
+        "cinepolisindia.com",
+        "district.in",
+        "ticketnew.com",
+    )
+    val NON_DELIVERY_QUERY = NON_DELIVERY_DOMAINS.joinToString(" ") { "-from:$it" }
+    private val nonDeliveryMerchant = Regex(
+        "(?i)\\b(bookmyshow|book my show|pvr|inox|cinepolis|movie ticket|cinema ticket|event ticket)\\b",
+    )
+
     private val knownMerchants = listOf(
         "amazon" to "Amazon",
         "flipkart" to "Flipkart",
@@ -240,10 +255,17 @@ object OrderEmailParser {
             .replace(multiSpace, " ")
             .take(30_000)
 
+        // PVR/BookMyShow-style tickets and food purchases contain order numbers
+        // and dates, but they are not parcels.
+        if (nonDeliveryMerchant.containsMatchIn("${message.from}\n${message.subject}")) {
+            return null
+        }
+
         val status = detectStatus(message.subject, body)
         val orderNumber = extractOrderNumber(combined)
-        val promisedDate = extractDeliveryDate(combined, message.receivedDate, status)
         val merchant = merchantFor(message.from)
+        val promisedDate = extractDeliveryDate(combined, message.receivedDate, status)
+            ?.let { sanitizePromisedDate(it, message.receivedDate, status, merchant) }
         val trackingNumber = extractTrackingNumber(combined)
         val carrier = detectCarrier(combined)
         val itemName = extractItemName(message.subject, body)
@@ -290,6 +312,38 @@ object OrderEmailParser {
             snippet = HtmlText.normalizeSpace(body).take(220),
             emailDate = message.receivedDate,
         )
+    }
+
+    /**
+     * A delivered email cannot promise a delivery in the future, and quick-
+     * commerce receipts often carry coupon-expiry dates far ahead. Keep dates
+     * anchored to when the email actually arrived.
+     */
+    private fun sanitizePromisedDate(
+        date: LocalDate,
+        received: LocalDate,
+        status: OrderStatus,
+        merchant: String,
+    ): LocalDate {
+        if (status == OrderStatus.DELIVERED) {
+            return when {
+                date.isAfter(received.plusDays(1)) -> received
+                date.isBefore(received.minusDays(14)) -> received
+                else -> date
+            }
+        }
+
+        val quickCommerce = Regex(
+            "(?i)\\b(swiggy|instamart|zomato|zepto|blinkit|bigbasket|dunzo)\\b",
+        )
+        if (quickCommerce.containsMatchIn(merchant)) {
+            return when {
+                date.isAfter(received.plusDays(2)) -> received
+                date.isBefore(received.minusDays(7)) -> received
+                else -> date
+            }
+        }
+        return date
     }
 
     private fun looksPromotional(

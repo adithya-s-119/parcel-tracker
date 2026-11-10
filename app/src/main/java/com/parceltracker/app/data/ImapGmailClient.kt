@@ -198,6 +198,7 @@ class ImapGmailClient {
         val query = "(category:purchases OR subject:order OR subject:delivery " +
             "OR subject:shipped OR subject:arriving OR subject:dispatched " +
             "OR ${OrderEmailParser.HOBBY_STORE_QUERY}) " +
+            "${OrderEmailParser.NON_DELIVERY_QUERY} " +
             "newer_than:${days}d -category:promotions -category:social -category:forums"
         val escaped = query.replace("\\", "\\\\").replace("\"", "\\\"")
         var found = LongArray(0)

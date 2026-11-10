@@ -23,6 +23,8 @@ class MailSyncCoordinator(
         progress: (String) -> Unit = {},
     ): SyncResult = mutex.withLock {
         val settings = settingsStore.settings.first()
+        dao.deleteNonDeliveryOrders()
+        dao.clampFutureDeliveredDates()
 
         if (fullRescan) {
             // A rebuild must start from a clean slate for every source, so an

@@ -66,6 +66,39 @@ class OrderEmailParserTest {
     }
 
     @Test
+    fun `ignores cinema and event bookings`() {
+        for (from in listOf("PVR Cinemas <noreply@pvr.in>", "BookMyShow <no-reply@bookmyshow.com>")) {
+            val parsed = OrderEmailParser.parse(
+                message(
+                    subject = "Food Purchase Confirmation",
+                    from = from,
+                    body = "Order ID: 500260159943419. Show on 12 November 2026. " +
+                        "Enjoy your snacks at the cinema.",
+                    received = LocalDate.of(2026, 11, 10),
+                ),
+            )
+
+            assertNull(parsed)
+        }
+    }
+
+    @Test
+    fun `anchors a delivered email's date to the email day`() {
+        val received = LocalDate.of(2026, 11, 10)
+        val parsed = OrderEmailParser.parse(
+            message(
+                subject = "Your Swiggy order was successfully delivered",
+                from = "Swiggy <noreply@swiggy.in>",
+                body = "Order # 252426828133601. Next delivery is 21 June 2027.",
+                received = received,
+            ),
+        )
+
+        assertEquals(OrderStatus.DELIVERED, parsed?.status)
+        assertEquals(received, parsed?.promisedDate)
+    }
+
+    @Test
     fun `detects successfully delivered in the subject`() {
         val parsed = OrderEmailParser.parse(
             message(

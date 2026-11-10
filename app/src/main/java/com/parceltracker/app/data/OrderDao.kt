@@ -47,6 +47,21 @@ interface OrderDao {
     suspend fun deleteAllImportedOrders()
 
     @Query(
+        "DELETE FROM orders WHERE isManual = 0 AND (" +
+            "lower(merchant) LIKE '%pvr%' OR lower(merchant) LIKE '%bookmyshow%' OR " +
+            "lower(merchant) LIKE '%book my show%' OR lower(merchant) LIKE '%inox%' OR " +
+            "lower(merchant) LIKE '%cinepolis%' OR lower(merchant) LIKE '%ticketnew%')",
+    )
+    suspend fun deleteNonDeliveryOrders()
+
+    @Query(
+        "UPDATE orders SET promisedEpochDay = (emailEpochMillis / 86400000) " +
+            "WHERE status = 'DELIVERED' AND promisedEpochDay IS NOT NULL " +
+            "AND promisedEpochDay > (emailEpochMillis / 86400000) + 1",
+    )
+    suspend fun clampFutureDeliveredDates()
+
+    @Query(
         "DELETE FROM orders WHERE source = 'SMS' AND isManual = 0 " +
             "AND promisedEpochDay IS NOT NULL AND promisedEpochDay < :cutoffDay " +
             "AND status NOT IN ('DELIVERED', 'CANCELLED', 'RETURNED')",
