@@ -46,7 +46,7 @@ class GmailAuthManager(private val context: Context) {
 
             !result.accessToken.isNullOrBlank() -> {
                 val token = result.accessToken!!
-                acceptToken(token, result.expirationTime)
+                acceptToken(token)
                 TokenResult.Success(token)
             }
 
@@ -56,7 +56,7 @@ class GmailAuthManager(private val context: Context) {
 
     fun acceptResult(result: AuthorizationResult): Boolean {
         val token = result.accessToken ?: return false
-        acceptToken(token, result.expirationTime)
+        acceptToken(token)
         return true
     }
 
@@ -68,13 +68,10 @@ class GmailAuthManager(private val context: Context) {
         expiresAtMillis = 0L
     }
 
-    private fun acceptToken(token: String, expirationTime: Long) {
+    private fun acceptToken(token: String) {
         cachedToken = token
-        expiresAtMillis = if (expirationTime > System.currentTimeMillis()) {
-            expirationTime
-        } else {
-            System.currentTimeMillis() + 50 * 60 * 1000L
-        }
+        // AuthorizationResult does not expose the expiry; Google access tokens last about an hour.
+        expiresAtMillis = System.currentTimeMillis() + 50 * 60 * 1000L
     }
 
     companion object {

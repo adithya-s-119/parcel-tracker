@@ -429,6 +429,7 @@ private fun MonthCalendarCard(
                             isSelected = date == selectedDate,
                             isToday = date == today,
                             orders = dayOrders,
+                            modifier = Modifier.weight(1f),
                             onClick = {
                                 if (YearMonth.from(date) != displayedMonth) {
                                     displayedMonthText = YearMonth.from(date).toString()
@@ -472,6 +473,7 @@ private fun CalendarDay(
     isSelected: Boolean,
     isToday: Boolean,
     orders: List<DeliveryOrder>,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     val background = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent
@@ -483,8 +485,7 @@ private fun CalendarDay(
     }
 
     Box(
-        modifier = Modifier
-            .weight(1f)
+        modifier = modifier
             .height(45.dp)
             .padding(2.dp)
             .clip(RoundedCornerShape(12.dp))

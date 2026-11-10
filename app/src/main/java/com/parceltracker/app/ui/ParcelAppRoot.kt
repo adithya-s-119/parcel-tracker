@@ -49,7 +49,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.google.android.gms.auth.api.identity.AuthorizationResult
+import com.google.android.gms.auth.api.identity.Identity
 import com.parceltracker.app.data.DeliveryOrder
 import com.parceltracker.app.ui.components.OrderEditorSheet
 import com.parceltracker.app.ui.screens.CalendarScreen
@@ -86,7 +86,9 @@ fun ParcelAppRoot(viewModel: MainViewModel) {
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             val authorizationResult = result.data?.let {
-                runCatching { AuthorizationResult.fromIntent(it) }.getOrNull()
+                runCatching {
+                    Identity.getAuthorizationClient(context).getAuthorizationResultFromIntent(it)
+                }.getOrNull()
             }
             viewModel.handleAuthorizationResult(authorizationResult)
         } else {

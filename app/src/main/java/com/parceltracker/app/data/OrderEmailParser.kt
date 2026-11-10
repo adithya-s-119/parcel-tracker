@@ -468,7 +468,7 @@ object OrderEmailParser {
     private fun extractOrderNumber(text: String): String? {
         for (pattern in orderPatterns) {
             val match = pattern.find(text) ?: continue
-            val raw = match.groups.getOrNull(1)?.value ?: match.value
+            val raw = match.groups[1]?.value ?: match.value
             cleanOrderNumber(raw)?.let { return it }
         }
         return null

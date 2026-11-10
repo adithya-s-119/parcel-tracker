@@ -14,7 +14,7 @@ import androidx.glance.LocalSize
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.SizeMode
-import androidx.glance.appwidget.action.actionStartActivity
+import androidx.glance.action.actionStartActivity
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
 import androidx.glance.appwidget.updateAll
@@ -24,7 +24,6 @@ import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
-import androidx.glance.layout.defaultWeight
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
@@ -124,7 +123,7 @@ private fun WidgetContent(orders: List<DeliveryOrder>, dark: Boolean) {
             }
 
             Spacer(modifier = GlanceModifier.height(7.dp))
-            Box(
+            Spacer(
                 modifier = GlanceModifier
                     .fillMaxWidth()
                     .height(1.dp)
