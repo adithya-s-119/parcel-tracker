@@ -31,7 +31,7 @@ interface OrderDao {
     @Query("DELETE FROM orders WHERE id = :id")
     suspend fun deleteById(id: String)
 
-    @Query("DELETE FROM orders WHERE isManual = 0")
+    @Query("DELETE FROM orders WHERE isManual = 0 AND source IN ('GMAIL', 'IMAP')")
     suspend fun deleteAllGmailOrders()
 
     @Query("DELETE FROM orders")

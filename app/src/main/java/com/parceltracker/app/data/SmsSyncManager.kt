@@ -64,7 +64,7 @@ class SmsSyncManager(
                 val merchant = merchantFor(parsed, row)
                 val itemName = parsed.itemName ?: row.body.take(90)
                 val order = parsed.copy(merchant = merchant, itemName = itemName)
-                when (repository.mergeGmail(order, row.id, row.threadId, row.epochMillis)) {
+                when (repository.mergeGmail(order, row.id, row.threadId, row.epochMillis, source = "SMS")) {
                     OrderRepository.MergeResult.INSERTED -> tracked++
                     OrderRepository.MergeResult.UPDATED -> updated++
                     OrderRepository.MergeResult.IGNORED -> Unit
@@ -128,6 +128,7 @@ class SmsSyncManager(
             row.id,
             row.threadId,
             row.epochMillis,
+            source = "SMS",
         )
         dao.markScanned(listOf(ScannedEmail(row.id)))
         onDataChanged()

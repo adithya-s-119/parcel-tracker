@@ -80,7 +80,7 @@ class ImapSyncManager(
         messages.forEach { message ->
             val parsed = runCatching { OrderEmailParser.parse(message) }.getOrNull()
             if (parsed != null) {
-                when (repository.mergeGmail(parsed, message.id, message.threadId, message.receivedEpochMillis)) {
+                when (repository.mergeGmail(parsed, message.id, message.threadId, message.receivedEpochMillis, source = "IMAP")) {
                     OrderRepository.MergeResult.INSERTED -> tracked++
                     OrderRepository.MergeResult.UPDATED -> updated++
                     OrderRepository.MergeResult.IGNORED -> Unit

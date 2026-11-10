@@ -35,6 +35,7 @@ data class DeliveryOrder(
     val emailSubject: String = "",
     val snippet: String = "",
     val notes: String? = null,
+    val source: String = "GMAIL",
     val isManual: Boolean = false,
     val isEdited: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),

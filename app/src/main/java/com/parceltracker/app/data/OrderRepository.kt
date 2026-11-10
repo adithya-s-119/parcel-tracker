@@ -24,6 +24,7 @@ class OrderRepository(private val dao: OrderDao) {
             emailSubject = "Added manually",
             snippet = "",
             notes = draft.notes?.trim()?.takeIf { it.isNotBlank() },
+            source = "MANUAL",
             isManual = true,
             isEdited = true,
             createdAt = now,
@@ -67,6 +68,7 @@ class OrderRepository(private val dao: OrderDao) {
         messageId: String,
         threadId: String,
         receivedEpochMillis: Long,
+        source: String = "GMAIL",
     ): MergeResult {
         val existing = parsed.orderNumber
             ?.let { dao.findByOrderNumber(it) }
@@ -100,6 +102,7 @@ class OrderRepository(private val dao: OrderDao) {
                 emailEpochMillis = receivedEpochMillis,
                 emailSubject = parsed.emailSubject,
                 snippet = parsed.snippet,
+                source = source,
                 createdAt = now,
                 updatedAt = now,
             )
