@@ -84,6 +84,7 @@ class OrderRepository(private val dao: OrderDao) {
 
         if (existing == null) {
             if (parsed.promisedDate == null &&
+                parsed.orderNumber == null &&
                 parsed.status != OrderStatus.DELIVERED &&
                 parsed.status != OrderStatus.CANCELLED
             ) {

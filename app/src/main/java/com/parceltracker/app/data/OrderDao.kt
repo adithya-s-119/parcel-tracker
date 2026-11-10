@@ -62,6 +62,41 @@ interface OrderDao {
     suspend fun clampFutureDeliveredDates()
 
     @Query(
+        "DELETE FROM orders WHERE isManual = 0 " +
+            "AND lower(emailSubject) LIKE '%invoice%' " +
+            "AND status NOT IN ('DELIVERED', 'CANCELLED', 'RETURNED')",
+    )
+    suspend fun deleteInvoiceOrders()
+
+    @Query(
+        "DELETE FROM orders WHERE isManual = 0 AND status != 'DELIVERED' " +
+            "AND (lower(emailSubject) LIKE '%your return for%' OR " +
+            "lower(emailSubject) LIKE '%return request%')",
+    )
+    suspend fun deleteReturnRequests()
+
+    @Query(
+        "DELETE FROM orders WHERE isManual = 0 " +
+            "AND status NOT IN ('DELIVERED', 'CANCELLED', 'RETURNED') " +
+            "AND (lower(emailSubject) LIKE '%refund%' OR lower(emailSubject) LIKE '%credit note%')",
+    )
+    suspend fun deleteRefundOrders()
+
+    @Query(
+        "UPDATE orders SET status = 'CANCELLED' WHERE isManual = 0 " +
+            "AND lower(emailSubject) LIKE '%cancel%' " +
+            "AND status NOT IN ('DELIVERED', 'RETURNED', 'CANCELLED')",
+    )
+    suspend fun markCancelledOrders()
+
+    @Query(
+        "UPDATE orders SET status = 'DELIVERY_FAILED' WHERE isManual = 0 " +
+            "AND lower(emailSubject) LIKE '%problem during delivery%' " +
+            "AND status NOT IN ('DELIVERED', 'CANCELLED', 'RETURNED')",
+    )
+    suspend fun markFailedDeliveries()
+
+    @Query(
         "DELETE FROM orders WHERE source = 'SMS' AND isManual = 0 " +
             "AND promisedEpochDay IS NOT NULL AND promisedEpochDay < :cutoffDay " +
             "AND status NOT IN ('DELIVERED', 'CANCELLED', 'RETURNED')",

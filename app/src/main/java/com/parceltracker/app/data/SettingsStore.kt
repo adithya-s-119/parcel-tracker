@@ -54,9 +54,11 @@ class SettingsStore(private val context: Context) {
         }
         .map { prefs ->
             val email = prefs[Keys.ACCOUNT_EMAIL]
-            val authMode = prefs[Keys.AUTH_MODE]
+            // Google Cloud/OAuth sign-in is no longer offered. Treat any old
+            // OAuth preference as disconnected so the app-password flow is used.
+            val storedMode = prefs[Keys.AUTH_MODE]
                 ?.let { stored -> runCatching { AuthMode.valueOf(stored) }.getOrNull() }
-                ?: if (email != null) AuthMode.OAUTH else AuthMode.NONE
+            val authMode = if (storedMode == AuthMode.IMAP) AuthMode.IMAP else AuthMode.NONE
 
             AppSettings(
                 accountEmail = email,

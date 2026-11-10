@@ -11,12 +11,13 @@ import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.LocalContext
-import androidx.glance.LocalSize
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.action.actionStartActivity
 import androidx.glance.appwidget.cornerRadius
+import androidx.glance.appwidget.lazy.LazyColumn
+import androidx.glance.appwidget.lazy.items
 import androidx.glance.appwidget.provideContent
 import androidx.glance.appwidget.updateAll
 import androidx.glance.background
@@ -58,7 +59,7 @@ class DeliveryWidget : GlanceAppWidget() {
         val app = context.applicationContext as? ParcelApp
         val orders = runCatching {
             app?.container?.database?.orderDao()
-                ?.nextDeliveries(LocalDate.now().toEpochDay(), 6)
+                ?.nextDeliveries(LocalDate.now().toEpochDay(), 10)
                 .orEmpty()
         }.getOrDefault(emptyList())
         val theme = runCatching {
@@ -94,12 +95,7 @@ private fun WidgetContent(orders: List<DeliveryOrder>, dark: Boolean, theme: Par
     val dateChip = lerp(background, accent, if (dark) 0.20f else 0.14f)
 
     val today = LocalDate.now()
-    val maxRows = when {
-        LocalSize.current.height < 150.dp -> 2
-        LocalSize.current.height < 200.dp -> 3
-        else -> 3
-    }
-    val visible = orders.take(maxRows)
+    val visible = orders.take(10)
 
     Box(
         modifier = GlanceModifier
@@ -160,21 +156,20 @@ private fun WidgetContent(orders: List<DeliveryOrder>, dark: Boolean, theme: Par
                 )
                 Spacer(modifier = GlanceModifier.defaultWeight())
             } else {
-                Spacer(modifier = GlanceModifier.defaultWeight())
-                visible.forEachIndexed { index, order ->
-                    WidgetRow(
-                        order = order,
-                        today = today,
-                        ink = ink,
-                        muted = muted,
-                        accent = accent,
-                        dateChip = dateChip,
-                    )
-                    if (index < visible.lastIndex) {
-                        Spacer(modifier = GlanceModifier.height(6.dp))
+                Spacer(modifier = GlanceModifier.height(6.dp))
+                LazyColumn(modifier = GlanceModifier.fillMaxWidth().defaultWeight()) {
+                    items(visible, itemId = { it.id.hashCode().toLong() }) { order ->
+                        WidgetRow(
+                            order = order,
+                            today = today,
+                            ink = ink,
+                            muted = muted,
+                            accent = accent,
+                            dateChip = dateChip,
+                        )
+                        Spacer(modifier = GlanceModifier.height(7.dp))
                     }
                 }
-                Spacer(modifier = GlanceModifier.defaultWeight())
             }
         }
     }
@@ -191,65 +186,72 @@ private fun WidgetRow(
 ) {
     val date = order.promisedDate
     Row(
-        modifier = GlanceModifier.fillMaxWidth().padding(vertical = 6.dp),
+        modifier = GlanceModifier.fillMaxWidth().padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             modifier = GlanceModifier
-                .width(50.dp)
-                .height(40.dp)
+                .width(54.dp)
+                .height(52.dp)
                 .background(dateChip)
-                .cornerRadius(11.dp),
+                .cornerRadius(13.dp),
             contentAlignment = Alignment.Center,
         ) {
             if (date != null) {
-                Column {
+                Column(
+                    modifier = GlanceModifier.padding(bottom = 2.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
                     Text(
                         text = date.dayOfMonth.toString(),
                         style = TextStyle(
                             color = ColorProvider(ink),
-                            fontSize = 20.sp,
+                            fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                         ),
                     )
                     Text(
                         text = date.month.name.take(3),
-                        style = TextStyle(color = ColorProvider(muted), fontSize = 11.sp),
+                        style = TextStyle(color = ColorProvider(muted), fontSize = 10.sp),
                     )
                 }
             }
         }
 
-        Spacer(modifier = GlanceModifier.width(10.dp))
+        Spacer(modifier = GlanceModifier.width(11.dp))
 
         Column(modifier = GlanceModifier.defaultWeight()) {
-            Text(
-                text = order.merchant.uppercase(Locale.getDefault()),
-                style = TextStyle(
-                    color = ColorProvider(accent),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                ),
-                maxLines = 1,
-            )
+            Row(
+                modifier = GlanceModifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = order.merchant.uppercase(Locale.getDefault()),
+                    style = TextStyle(
+                        color = ColorProvider(accent),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                    ),
+                    maxLines = 1,
+                    modifier = GlanceModifier.defaultWeight(),
+                )
+                Text(
+                    text = relativeLabel(date, today),
+                    style = TextStyle(color = ColorProvider(muted), fontSize = 11.sp),
+                    maxLines = 1,
+                )
+            }
+            Spacer(modifier = GlanceModifier.height(2.dp))
             Text(
                 text = order.itemName,
                 style = TextStyle(
                     color = ColorProvider(ink),
-                    fontSize = 17.sp,
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.Medium,
                 ),
-                maxLines = 1,
+                maxLines = 2,
             )
         }
-
-        Spacer(modifier = GlanceModifier.width(6.dp))
-
-        Text(
-            text = relativeLabel(date, today),
-            style = TextStyle(color = ColorProvider(muted), fontSize = 13.sp),
-            maxLines = 1,
-        )
     }
 }
 

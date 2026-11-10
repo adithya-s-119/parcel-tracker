@@ -25,6 +25,11 @@ class MailSyncCoordinator(
         val settings = settingsStore.settings.first()
         dao.deleteNonDeliveryOrders()
         dao.clampFutureDeliveredDates()
+        dao.deleteInvoiceOrders()
+        dao.deleteReturnRequests()
+        dao.deleteRefundOrders()
+        dao.markCancelledOrders()
+        dao.markFailedDeliveries()
 
         if (fullRescan) {
             // A rebuild must start from a clean slate for every source, so an

@@ -67,7 +67,9 @@ object OrderEmailParser {
         "(?i)\\b(arriv(?:e|es|ing)|deliver(?:y|ed|s|ing)?|dispatch(?:ed|ing)?|ship(?:ped|ping|s)?|expected|estimated|guaranteed|scheduled|get it|package|parcel|on its way|out for delivery)\\b",
     )
     private val strongDeliveryContext = Regex(
-        "(?i)(arriv\\w*|delivery (?:by|on|date|estimate)|deliver(?:ed)? (?:by|on)|expected|estimated|guaranteed|get it by|will be delivered|scheduled to arrive|out for delivery|on its way)",
+        "(?i)(arriv\\w*|delivery\\s*[:#\\-]|delivery (?:by|on|date|estimate|window|expected)|" +
+            "deliver(?:ed)? (?:by|on)|expected|estimated|guaranteed|get it by|will be delivered|" +
+            "scheduled to arrive|out for delivery|on its way)",
     )
     private val exclusionContext = Regex(
         "(?i)\\b(return|refund|exchange|order(?:ed)? (?:on|date)|placed on|purchase date|billing|invoice|statement|expires?|valid (?:until|through)|offer ends|coupon|promotion|payment|deliver to|shipping address|review by|warranty|subscription (?:renews|ends)|due date)\\b",
@@ -124,6 +126,13 @@ object OrderEmailParser {
         "robokits.co.in",
         "thinkrobotics.in",
         "rhydolabz.com",
+        "quartzcomponents.com",
+        "sunrom.com",
+        "electrobot.in",
+        "robomart.com",
+        "element14.com",
+        "mouser.in",
+        "digikey.in",
     )
     val HOBBY_STORE_QUERY = HOBBY_STORE_DOMAINS.joinToString(" OR ") { "from:$it" }
 
@@ -186,6 +195,66 @@ object OrderEmailParser {
         "robokits" to "Robokits",
         "thinkrobotics" to "ThinkRobotics",
         "rhydolabz" to "RhydoLABZ",
+        "quartzcomponents" to "Quartz Components",
+        "sunrom" to "Sunrom",
+        "electrobot" to "Electrobot",
+        "robomart" to "Robomart",
+        "element14" to "element14",
+        "mouser" to "Mouser",
+        "digikey" to "DigiKey",
+        "dmart.in" to "DMart",
+        "vijaysales.com" to "Vijay Sales",
+        "sangeethamobiles.com" to "Sangeetha Mobiles",
+        "poorvika.com" to "Poorvika",
+        "bajajelectronics.com" to "Bajaj Electronics",
+        "firstcry.com" to "FirstCry",
+        "lenskart.com" to "Lenskart",
+        "pepperfry.com" to "Pepperfry",
+        "urbanladder.com" to "Urban Ladder",
+        "wakefit.co" to "Wakefit",
+        "purplle.com" to "Purplle",
+        "spencers.in" to "Spencer's",
+        "licious.in" to "Licious",
+        "freshtohome.com" to "FreshToHome",
+        "countrydelight.in" to "Country Delight",
+        "newegg.com" to "Newegg",
+        "bhphotovideo.com" to "B&H Photo",
+        "adorama.com" to "Adorama",
+        "costco.com" to "Costco",
+        "homedepot.com" to "Home Depot",
+        "lowes.com" to "Lowe's",
+        "wayfair.com" to "Wayfair",
+        "aliexpress.com" to "AliExpress",
+        "banggood.com" to "Banggood",
+        "temu.com" to "Temu",
+        "shein.com" to "SHEIN",
+        "asos.com" to "ASOS",
+        "uniqlo.com" to "Uniqlo",
+        "zara.com" to "Zara",
+        "hm.com" to "H&M",
+        "nike.com" to "Nike",
+        "adidas.com" to "Adidas",
+        "puma.com" to "Puma",
+        "reebok.com" to "Reebok",
+        "newbalance.com" to "New Balance",
+        "underarmour.com" to "Under Armour",
+        "dell.com" to "Dell",
+        "lenovo.com" to "Lenovo",
+        "asus.com" to "ASUS",
+        "acer.com" to "Acer",
+        "logitech.com" to "Logitech",
+        "razer.com" to "Razer",
+        "corsair.com" to "Corsair",
+        "sony.com" to "Sony",
+        "lg.com" to "LG",
+        "vivo.com" to "Vivo",
+        "oppo.com" to "Oppo",
+        "realme.com" to "Realme",
+        "xiaomi.com" to "Xiaomi",
+        "mi.com" to "Xiaomi",
+        "nothing.tech" to "Nothing",
+        "store.google.com" to "Google Store",
+        "microsoft.com" to "Microsoft",
     )
 
     private val carriers = listOf(
@@ -211,6 +280,7 @@ object OrderEmailParser {
         val date: LocalDate,
         val index: Int,
         val score: Int,
+        val hasDeliverySignal: Boolean,
     )
 
     fun parse(message: GmailMessage): ParsedOrder? = parseInternal(message, relaxed = false)
@@ -258,6 +328,19 @@ object OrderEmailParser {
         // PVR/BookMyShow-style tickets and food purchases contain order numbers
         // and dates, but they are not parcels.
         if (nonDeliveryMerchant.containsMatchIn("${message.from}\n${message.subject}")) {
+            return null
+        }
+        // Invoices and receipts are not shipping updates. They often carry
+        // unrelated dates (invoice date, due date, payment date).
+        if (Regex("(?i)\\b(invoice|tax invoice|receipt|payment confirmation|payment successful|refund|refunded|credit note)\\b")
+                .containsMatchIn(message.subject)
+        ) {
+            return null
+        }
+        // A return request is not a parcel that is still arriving.
+        if (Regex("(?i)\\b(your return for|return request|started a return|return pickup)\\b")
+                .containsMatchIn("${message.subject}\n${body.take(1_500)}")
+        ) {
             return null
         }
 
@@ -379,9 +462,26 @@ object OrderEmailParser {
     ): LocalDate? {
         val candidates = mutableListOf<DateCandidate>()
 
-        fun add(date: LocalDate?, index: Int, bonus: Int = 0) {
+        fun add(
+            date: LocalDate?,
+            index: Int,
+            bonus: Int = 0,
+            explicitDeliverySignal: Boolean = false,
+        ) {
             if (date == null) return
-            candidates += DateCandidate(date, index, scoreAt(text, index, date, received, status) + bonus)
+            val before = text.substring((index - 110).coerceAtLeast(0), index)
+                .lowercase(Locale.ENGLISH)
+            val after = text.substring(index, (index + 60).coerceAtMost(text.length))
+                .lowercase(Locale.ENGLISH)
+            val hasDeliverySignal = explicitDeliverySignal ||
+                strongDeliveryContext.containsMatchIn(before.takeLast(90)) ||
+                strongDeliveryContext.containsMatchIn(after.take(50))
+            candidates += DateCandidate(
+                date = date,
+                index = index,
+                score = scoreAt(text, index, date, received, status) + bonus,
+                hasDeliverySignal = hasDeliverySignal,
+            )
         }
 
         // Date ranges: use the last promised day.
@@ -473,19 +573,25 @@ object OrderEmailParser {
                 "tomorrow" -> received.plusDays(1)
                 else -> null
             }
-            add(date, match.range.first, bonus = 5)
+            add(date, match.range.first, bonus = 5, explicitDeliverySignal = true)
         }
 
         withinDays.findAll(text).forEach { match ->
             val days = match.groupValues[2].toIntOrNull() ?: match.groupValues[1].toIntOrNull()
             if (days != null && days in 0..60) {
-                add(received.plusDays(days.toLong()), match.range.first, bonus = 3)
+                add(
+                    received.plusDays(days.toLong()),
+                    match.range.first,
+                    bonus = 3,
+                    explicitDeliverySignal = true,
+                )
             }
         }
 
         val minScore = if (status == OrderStatus.DELIVERED) 1 else 2
         val best = candidates
             .filter { it.score >= minScore }
+            .filter { status == OrderStatus.DELIVERED || it.hasDeliverySignal }
             .sortedWith(
                 compareByDescending<DateCandidate> { it.score }
                     .thenByDescending { if (it.date.isBefore(received)) 0 else 1 }
@@ -604,7 +710,7 @@ object OrderEmailParser {
         if (cancelled) return OrderStatus.CANCELLED
 
         val failed = Regex(
-            "(?i)\\b(delivery attempt (?:failed|unsuccessful)|attempted delivery|delivery failed|failed delivery|unable to deliver|could not deliver|couldn't deliver|recipient (?:not available|unavailable)|delivery was not possible)\\b",
+            "(?i)\\b(delivery attempt (?:failed|unsuccessful)|attempted delivery|delivery failed|failed delivery|problem during delivery|delivery problem|issue with delivery|unable to deliver|could not deliver|couldn't deliver|recipient (?:not available|unavailable)|delivery was not possible)\\b",
         )
         if (failed.containsMatchIn(statusBody)) return OrderStatus.DELIVERY_FAILED
 
@@ -659,7 +765,7 @@ object OrderEmailParser {
         val subject = subjectLower.trimStart()
 
         if (Regex("(?i)^(?:cancelled|canceled)\\b").containsMatchIn(subject) ||
-            Regex("(?i)\\b(?:order|item|shipment|delivery)\\b[^.!\\n]{0,60}\\b(?:has been|was|is) (?:cancelled|canceled)\\b")
+            Regex("(?i)\\b(?:order|item|shipment|delivery)\\b[^.!\\n]{0,40}\\b(?:(?:has been|was|is|got) )?(?:cancelled|canceled)\\b")
                 .containsMatchIn(subject)
         ) {
             return OrderStatus.CANCELLED
@@ -672,7 +778,7 @@ object OrderEmailParser {
         ) {
             return OrderStatus.DELIVERED
         }
-        if (Regex("(?i)\\b(delivery attempt (?:failed|unsuccessful)|attempted delivery|delivery failed|failed delivery|unable to deliver|could not deliver)\\b")
+        if (Regex("(?i)\\b(delivery attempt (?:failed|unsuccessful)|attempted delivery|delivery failed|failed delivery|problem during delivery|delivery problem|issue with delivery|unable to deliver|could not deliver)\\b")
                 .containsMatchIn(subject)
         ) {
             return OrderStatus.DELIVERY_FAILED

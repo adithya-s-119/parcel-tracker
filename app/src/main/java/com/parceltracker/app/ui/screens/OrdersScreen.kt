@@ -42,9 +42,18 @@ import com.parceltracker.app.ui.components.SectionLabel
 import java.time.LocalDate
 import java.util.Locale
 
-/** Active, and either undated or not already past its promised day. */
-private fun DeliveryOrder.isUpcoming(todayEpochDay: Long): Boolean =
-    isActive && (promisedEpochDay == null || promisedEpochDay >= todayEpochDay)
+/**
+ * A dated order stays in Upcoming through its promised day. Undated orders
+ * only stay for two weeks: after that they are almost always stale
+ * confirmations for something that already arrived.
+ */
+private fun DeliveryOrder.isUpcoming(todayEpochDay: Long): Boolean {
+    if (!isActive) return false
+    val date = promisedEpochDay
+    if (date != null) return date >= todayEpochDay
+    val twoWeeksAgo = System.currentTimeMillis() - 14L * 24 * 60 * 60 * 1000
+    return emailEpochMillis >= twoWeeksAgo
+}
 
 private enum class OrderFilter(val label: String) {
     UPCOMING("Upcoming"),

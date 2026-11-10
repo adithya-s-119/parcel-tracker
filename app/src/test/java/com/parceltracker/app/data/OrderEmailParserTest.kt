@@ -66,6 +66,54 @@ class OrderEmailParserTest {
     }
 
     @Test
+    fun `ignores invoices and return requests`() {
+        val invoice = OrderEmailParser.parse(
+            message(
+                subject = "Invoice for Order ID #ONLSCR64911",
+                from = "OnlyScrews <store@onlyscrews.in>",
+                body = "Invoice date: 1 February 2027. Order # ONLSCR64911.",
+                received = LocalDate.of(2026, 11, 8),
+            ),
+        )
+        val returnRequest = OrderEmailParser.parse(
+            message(
+                subject = "Your return for Amazon order 403-3549909-1269119",
+                from = "Amazon <return@amazon.in>",
+                body = "We have received your return request. Order # 403-3549909-1269119.",
+                received = LocalDate.of(2026, 11, 8),
+            ),
+        )
+        val refund = OrderEmailParser.parse(
+            message(
+                subject = "Refund issued for your Amazon order 403-3549909-1269119",
+                from = "Amazon <refund@amazon.in>",
+                body = "Your refund has been processed. Order # 403-3549909-1269119.",
+                received = LocalDate.of(2026, 11, 8),
+            ),
+        )
+
+        assertNull(invoice)
+        assertNull(returnRequest)
+        assertNull(refund)
+    }
+
+    @Test
+    fun `does not invent a date without delivery wording`() {
+        val parsed = OrderEmailParser.parse(
+            message(
+                subject = "Order #ONLSCR64911 confirmed",
+                from = "OnlyScrews <store@onlyscrews.in>",
+                body = "Thank you for your order! Order date: 8 November 2026. " +
+                    "Renewal date: 1 February 2027. Order # ONLSCR64911.",
+                received = LocalDate.of(2026, 11, 8),
+            ),
+        )
+
+        assertNotNull(parsed)
+        assertNull(parsed!!.promisedDate)
+    }
+
+    @Test
     fun `ignores cinema and event bookings`() {
         for (from in listOf("PVR Cinemas <noreply@pvr.in>", "BookMyShow <no-reply@bookmyshow.com>")) {
             val parsed = OrderEmailParser.parse(
@@ -243,6 +291,12 @@ class OrderEmailParserTest {
             "orders@robokits.co.in" to "Robokits",
             "orders@thinkrobotics.in" to "ThinkRobotics",
             "orders@rhydolabz.com" to "RhydoLABZ",
+            "orders@dmart.in" to "DMart",
+            "orders@vijaysales.com" to "Vijay Sales",
+            "orders@firstcry.com" to "FirstCry",
+            "orders@lenskart.com" to "Lenskart",
+            "orders@newegg.com" to "Newegg",
+            "orders@aliexpress.com" to "AliExpress",
         )
 
         for ((from, merchant) in stores) {
@@ -307,6 +361,34 @@ class OrderEmailParserTest {
         )
 
         assertEquals(OrderStatus.UPCOMING, parsed?.status)
+    }
+
+    @Test
+    fun `detects an item cancellation subject`() {
+        val parsed = OrderEmailParser.parse(
+            message(
+                subject = "Item cancelled successfully: \"Test item\"",
+                from = "Amazon <ship-update@amazon.in>",
+                body = "Order # 403-8725311-7564316. We're sorry this item was cancelled.",
+                received = LocalDate.of(2026, 11, 10),
+            ),
+        )
+
+        assertEquals(OrderStatus.CANCELLED, parsed?.status)
+    }
+
+    @Test
+    fun `detects a delivery problem subject`() {
+        val parsed = OrderEmailParser.parse(
+            message(
+                subject = "Problem during delivery: “Wizplex QY Toys”",
+                from = "Amazon <ship-update@amazon.in>",
+                body = "Order # 403-4956173-9314764. There was a problem delivering your package.",
+                received = LocalDate.of(2026, 10, 14),
+            ),
+        )
+
+        assertEquals(OrderStatus.DELIVERY_FAILED, parsed?.status)
     }
 
     @Test

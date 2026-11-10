@@ -55,7 +55,6 @@ fun GmailPasswordSheet(
     state: ImapAuthUiState,
     onSubmit: (String, String) -> Unit,
     onDismiss: () -> Unit,
-    onGoogleSignIn: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val uriHandler = LocalUriHandler.current
@@ -215,20 +214,6 @@ fun GmailPasswordSheet(
                     Text("Connect Gmail", style = MaterialTheme.typography.titleMedium)
                 }
             }
-
-            TextButton(
-                onClick = onGoogleSignIn,
-                enabled = !state.loading,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(
-                    text = "Use Google sign-in instead",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            Spacer(modifier = Modifier.height(6.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),

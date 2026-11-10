@@ -52,9 +52,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.parceltracker.app.ui.components.GoogleGMark
 import com.parceltracker.app.ui.components.ParcelWordmark
-import com.parceltracker.app.ui.components.SignInHelpDialog
 import com.parceltracker.app.ui.theme.Forest
 import com.parceltracker.app.ui.theme.PaperBright
 import com.parceltracker.app.ui.theme.Sage
@@ -65,12 +63,10 @@ fun OnboardingScreen(
     syncing: Boolean,
     syncMessage: String?,
     authError: String?,
-    onConnect: () -> Unit,
     onUseAppPassword: () -> Unit,
     onSkip: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
-    var showSignInHelp by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -134,7 +130,7 @@ fun OnboardingScreen(
             Spacer(modifier = Modifier.height(30.dp))
 
             Button(
-                onClick = onConnect,
+                onClick = onUseAppPassword,
                 enabled = !syncing,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -157,54 +153,29 @@ fun OnboardingScreen(
                         style = MaterialTheme.typography.titleMedium,
                     )
                 } else {
-                    GoogleGMark()
+                    Icon(
+                        imageVector = Icons.Outlined.Lock,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = "Continue with Google",
+                        text = "Connect Gmail with app password",
                         style = MaterialTheme.typography.titleMedium,
                     )
                 }
             }
 
             TextButton(
-                onClick = onUseAppPassword,
+                onClick = onSkip,
                 enabled = !syncing,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
-                    text = "Use a Gmail app password (no Google Cloud)",
+                    text = "Browse without Gmail",
                     style = MaterialTheme.typography.labelLarge,
                     color = colors.onSurfaceVariant,
                 )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                TextButton(
-                    onClick = onSkip,
-                    enabled = !syncing,
-                ) {
-                    Text(
-                        text = "Browse without Gmail",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = colors.onSurfaceVariant,
-                    )
-                }
-                Text(
-                    text = "·",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = colors.onSurfaceVariant.copy(alpha = 0.5f),
-                )
-                TextButton(onClick = { showSignInHelp = true }) {
-                    Text(
-                        text = "Sign-in help",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = colors.onSurfaceVariant,
-                    )
-                }
             }
 
             if (!authError.isNullOrBlank()) {
@@ -265,9 +236,6 @@ fun OnboardingScreen(
         }
     }
 
-    if (showSignInHelp) {
-        SignInHelpDialog(onDismiss = { showSignInHelp = false })
-    }
 }
 
 @Composable

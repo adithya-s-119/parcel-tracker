@@ -1,12 +1,9 @@
 package com.parceltracker.app.ui
 
 import android.Manifest
-import android.app.Activity
-import android.content.IntentSender
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -49,8 +46,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.google.android.gms.auth.api.identity.Identity
-import com.parceltracker.app.data.AuthMode
 import com.parceltracker.app.data.DeliveryOrder
 import com.parceltracker.app.ui.components.GmailPasswordSheet
 import com.parceltracker.app.ui.components.OrderEditorSheet
@@ -90,33 +85,6 @@ fun ParcelAppRoot(viewModel: MainViewModel) {
                 is UiEvent.Message -> snackbarHostState.showSnackbar(event.text)
             }
         }
-    }
-
-    val authLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartIntentSenderForResult(),
-    ) { result ->
-        val parsed = result.data?.let { data ->
-            runCatching {
-                Identity.getAuthorizationClient(context).getAuthorizationResultFromIntent(data)
-            }
-        }
-        when {
-            parsed?.isSuccess == true -> viewModel.handleAuthorizationResult(parsed.getOrNull())
-            parsed?.isFailure == true -> viewModel.handleAuthorizationFailure(parsed.exceptionOrNull())
-            result.resultCode == Activity.RESULT_OK -> viewModel.handleAuthorizationFailure(null)
-            else -> viewModel.handleAuthorizationResult(null)
-        }
-    }
-
-    val connect: () -> Unit = {
-        viewModel.connect(context) { intentSender: IntentSender ->
-            authLauncher.launch(
-                IntentSenderRequest.Builder(intentSender).build(),
-            )
-        }
-    }
-    val mailConnect: () -> Unit = {
-        if (settings.authMode == AuthMode.IMAP) openImapSheet() else connect()
     }
 
     val notificationLauncher = rememberLauncherForActivityResult(
@@ -161,7 +129,6 @@ fun ParcelAppRoot(viewModel: MainViewModel) {
                 else -> null
             },
             authError = authError,
-            onConnect = connect,
             onUseAppPassword = openImapSheet,
             onSkip = viewModel::continueWithoutGmail,
         )
@@ -172,8 +139,6 @@ fun ParcelAppRoot(viewModel: MainViewModel) {
             orders = orders,
             syncState = syncState,
             snackbarHostState = snackbarHostState,
-            connect = connect,
-            mailConnect = mailConnect,
             onUseAppPassword = openImapSheet,
             onSmsToggle = viewModel::setSmsEnabled,
             sharedImport = sharedImport,
@@ -190,11 +155,6 @@ fun ParcelAppRoot(viewModel: MainViewModel) {
                 showImapSheet = false
                 viewModel.resetImapAuthState()
             },
-            onGoogleSignIn = {
-                showImapSheet = false
-                viewModel.resetImapAuthState()
-                connect()
-            },
         )
     }
 }
@@ -206,8 +166,6 @@ private fun MainScaffold(
     orders: List<DeliveryOrder>,
     syncState: SyncUiState,
     snackbarHostState: SnackbarHostState,
-    connect: () -> Unit,
-    mailConnect: () -> Unit,
     onUseAppPassword: () -> Unit,
     onSmsToggle: (Boolean) -> Unit,
     sharedImport: SharedEmailImport?,
@@ -285,7 +243,7 @@ private fun MainScaffold(
                     syncing = syncing,
                     accountEmail = settings.accountEmail,
                     authNeeded = settings.authNeeded,
-                    onConnect = mailConnect,
+                    onConnect = onUseAppPassword,
                     onAdd = { editorTarget = EditorTarget(null, selectedDate) },
                     lastSyncAt = settings.lastSyncAt,
                 )
@@ -306,7 +264,6 @@ private fun MainScaffold(
                     syncing = syncing,
                     syncMessage = syncMessage,
                     onSync = { viewModel.syncNow(announce = true) },
-                    onConnect = connect,
                     onUseAppPassword = onUseAppPassword,
                     onSmsToggle = onSmsToggle,
                     onDisconnect = viewModel::signOutGmail,

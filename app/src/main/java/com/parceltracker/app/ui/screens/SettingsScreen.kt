@@ -70,8 +70,6 @@ import com.parceltracker.app.data.AuthMode
 import com.parceltracker.app.data.ParcelAccent
 import com.parceltracker.app.data.SmsPermission
 import com.parceltracker.app.ui.Dates
-import com.parceltracker.app.ui.components.GoogleGMark
-import com.parceltracker.app.ui.components.SignInHelpDialog
 
 @Composable
 fun SettingsScreen(
@@ -79,7 +77,6 @@ fun SettingsScreen(
     syncing: Boolean,
     syncMessage: String?,
     onSync: () -> Unit,
-    onConnect: () -> Unit,
     onUseAppPassword: () -> Unit,
     onSmsToggle: (Boolean) -> Unit,
     onDisconnect: () -> Unit,
@@ -93,7 +90,6 @@ fun SettingsScreen(
 ) {
     var showRebuildDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
-    var showSignInHelp by remember { mutableStateOf(false) }
     var showShareHelp by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
@@ -145,7 +141,6 @@ fun SettingsScreen(
                 syncing = syncing,
                 syncMessage = syncMessage,
                 onSync = onSync,
-                onConnect = onConnect,
                 onUseAppPassword = onUseAppPassword,
                 onDisconnect = onDisconnect,
             )
@@ -397,21 +392,6 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.surface,
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             ) {
-                ActionRow(
-                    icon = Icons.Outlined.Info,
-                    title = "Gmail sign-in help",
-                    subtitle = "Package, SHA-1 and Play services status",
-                    onClick = { showSignInHelp = true },
-                )
-            }
-        }
-
-        item {
-            Surface(
-                shape = MaterialTheme.shapes.large,
-                color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-            ) {
                 Row(
                     modifier = Modifier.padding(18.dp),
                     verticalAlignment = Alignment.Top,
@@ -433,7 +413,7 @@ fun SettingsScreen(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Scope: gmail.readonly · SMS stays on-device",
+                            text = "Read-only IMAP · SMS stays on-device",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
                         )
@@ -476,10 +456,6 @@ fun SettingsScreen(
                 TextButton(onClick = { showRebuildDialog = false }) { Text("Cancel") }
             },
         )
-    }
-
-    if (showSignInHelp) {
-        SignInHelpDialog(onDismiss = { showSignInHelp = false })
     }
 
     if (showShareHelp) {
@@ -596,15 +572,14 @@ private fun AccountCard(
     syncing: Boolean,
     syncMessage: String?,
     onSync: () -> Unit,
-    onConnect: () -> Unit,
     onUseAppPassword: () -> Unit,
     onDisconnect: () -> Unit,
 ) {
-    val email = settings.accountEmail
-    val connectionLabel = when (settings.authMode) {
-        AuthMode.IMAP -> "Connected · App password"
-        AuthMode.OAUTH -> "Connected · Google sign-in"
-        AuthMode.NONE -> "Connected"
+    val email = settings.accountEmail?.takeIf { settings.authMode != AuthMode.NONE }
+    val connectionLabel = if (settings.authMode == AuthMode.IMAP) {
+        "Connected · App password"
+    } else {
+        "Connected"
     }
     Surface(
         shape = MaterialTheme.shapes.large,
@@ -707,11 +682,7 @@ private fun AccountCard(
                     }
                     if (settings.authNeeded) {
                         Button(
-                            onClick = if (settings.authMode == AuthMode.IMAP) {
-                                onUseAppPassword
-                            } else {
-                                onConnect
-                            },
+                            onClick = onUseAppPassword,
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(14.dp),
                         ) {
@@ -741,7 +712,7 @@ private fun AccountCard(
                 )
                 Spacer(modifier = Modifier.height(14.dp))
                 Button(
-                    onClick = onConnect,
+                    onClick = onUseAppPassword,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(50.dp),
@@ -751,18 +722,6 @@ private fun AccountCard(
                         contentColor = MaterialTheme.colorScheme.onPrimary,
                     ),
                 ) {
-                    GoogleGMark()
-                    Spacer(modifier = Modifier.width(9.dp))
-                    Text("Sign in with Google", style = MaterialTheme.typography.titleMedium)
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = onUseAppPassword,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp),
-                    shape = RoundedCornerShape(15.dp),
-                ) {
                     Icon(
                         imageVector = Icons.Outlined.Lock,
                         contentDescription = null,
@@ -770,12 +729,13 @@ private fun AccountCard(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Use Gmail app password",
+                        text = "Connect Gmail with app password",
                         style = MaterialTheme.typography.titleMedium,
                     )
                 }
                 Text(
-                    text = "App-password sign-in needs no Google Cloud. You can also enable delivery texts below.",
+                    text = "Free, read-only access with a Gmail app password. No Google Cloud project needed. " +
+                        "You can also enable delivery texts below.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 8.dp),
