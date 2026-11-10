@@ -10,3 +10,6 @@
 app/build
 build.log
 .kotlin
+
+# Local social launch drafts (never publish)
+/launch/
