@@ -24,6 +24,7 @@ data class AppSettings(
     val onboardingComplete: Boolean = false,
     val autoSync: Boolean = true,
     val notificationsEnabled: Boolean = true,
+    val smsEnabled: Boolean = false,
     val scanDays: Int = 180,
     val lastSyncAt: Long = 0L,
     val lastSyncSummary: String? = null,
@@ -38,6 +39,7 @@ class SettingsStore(private val context: Context) {
         val ONBOARDING_COMPLETE = booleanPreferencesKey("onboarding_complete")
         val AUTO_SYNC = booleanPreferencesKey("auto_sync")
         val NOTIFICATIONS = booleanPreferencesKey("notifications")
+        val SMS_ENABLED = booleanPreferencesKey("sms_enabled")
         val SCAN_DAYS = intPreferencesKey("scan_days")
         val LAST_SYNC_AT = longPreferencesKey("last_sync_at")
         val LAST_SYNC_SUMMARY = stringPreferencesKey("last_sync_summary")
@@ -60,6 +62,7 @@ class SettingsStore(private val context: Context) {
                 onboardingComplete = prefs[Keys.ONBOARDING_COMPLETE] ?: false,
                 autoSync = prefs[Keys.AUTO_SYNC] ?: true,
                 notificationsEnabled = prefs[Keys.NOTIFICATIONS] ?: true,
+                smsEnabled = prefs[Keys.SMS_ENABLED] ?: false,
                 scanDays = prefs[Keys.SCAN_DAYS] ?: 180,
                 lastSyncAt = prefs[Keys.LAST_SYNC_AT] ?: 0L,
                 lastSyncSummary = prefs[Keys.LAST_SYNC_SUMMARY],
@@ -91,6 +94,10 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setNotificationsEnabled(enabled: Boolean) {
         context.dataStore.edit { it[Keys.NOTIFICATIONS] = enabled }
+    }
+
+    suspend fun setSmsEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.SMS_ENABLED] = enabled }
     }
 
     suspend fun setScanDays(days: Int) {

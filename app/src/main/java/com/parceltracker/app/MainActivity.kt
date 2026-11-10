@@ -1,5 +1,6 @@
 package com.parceltracker.app
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -21,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.parceltracker.app.data.HtmlText
 import com.parceltracker.app.ui.MainViewModel
 import com.parceltracker.app.ui.ParcelAppRoot
 import com.parceltracker.app.ui.components.ParcelWordmark
@@ -34,6 +36,7 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        handleShareIntent(intent)
 
         setContent {
             ParcelTheme {
@@ -45,6 +48,25 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleShareIntent(intent)
+    }
+
+    private fun handleShareIntent(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_SEND) return
+
+        val html = intent.getStringExtra(Intent.EXTRA_HTML_TEXT)
+        val text = intent.getStringExtra(Intent.EXTRA_TEXT)
+            ?: html?.let(HtmlText::toPlain)
+            ?: return
+        val subject = intent.getStringExtra(Intent.EXTRA_SUBJECT).orEmpty()
+
+        viewModel.handleSharedText(subject, text)
+        intent.action = null
     }
 }
 

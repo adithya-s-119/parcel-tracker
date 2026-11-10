@@ -50,7 +50,9 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.gms.auth.api.identity.Identity
+import com.parceltracker.app.data.AuthMode
 import com.parceltracker.app.data.DeliveryOrder
+import com.parceltracker.app.ui.components.GmailPasswordSheet
 import com.parceltracker.app.ui.components.OrderEditorSheet
 import com.parceltracker.app.ui.screens.CalendarScreen
 import com.parceltracker.app.ui.screens.OnboardingScreen
@@ -61,6 +63,7 @@ import java.time.LocalDate
 private data class EditorTarget(
     val order: DeliveryOrder?,
     val initialDate: LocalDate,
+    val initialDraft: com.parceltracker.app.data.OrderDraft? = null,
 )
 
 @Composable
@@ -69,6 +72,14 @@ fun ParcelAppRoot(viewModel: MainViewModel) {
     val orders by viewModel.orders.collectAsStateWithLifecycle()
     val syncState by viewModel.syncState.collectAsStateWithLifecycle()
     val authError by viewModel.authError.collectAsStateWithLifecycle()
+    val sharedImport by viewModel.sharedImport.collectAsStateWithLifecycle()
+    val imapAuthState by viewModel.imapAuthState.collectAsStateWithLifecycle()
+
+    var showImapSheet by rememberSaveable { mutableStateOf(false) }
+    val openImapSheet: () -> Unit = {
+        viewModel.resetImapAuthState()
+        showImapSheet = true
+    }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
@@ -103,6 +114,9 @@ fun ParcelAppRoot(viewModel: MainViewModel) {
                 IntentSenderRequest.Builder(intentSender).build(),
             )
         }
+    }
+    val mailConnect: () -> Unit = {
+        if (settings.authMode == AuthMode.IMAP) openImapSheet() else connect()
     }
 
     val notificationLauncher = rememberLauncherForActivityResult(
@@ -148,6 +162,7 @@ fun ParcelAppRoot(viewModel: MainViewModel) {
             },
             authError = authError,
             onConnect = connect,
+            onUseAppPassword = openImapSheet,
             onSkip = viewModel::continueWithoutGmail,
         )
     } else {
@@ -158,6 +173,28 @@ fun ParcelAppRoot(viewModel: MainViewModel) {
             syncState = syncState,
             snackbarHostState = snackbarHostState,
             connect = connect,
+            mailConnect = mailConnect,
+            onUseAppPassword = openImapSheet,
+            onSmsToggle = viewModel::setSmsEnabled,
+            sharedImport = sharedImport,
+            onConsumeSharedImport = viewModel::consumeSharedImport,
+        )
+    }
+
+    if (showImapSheet) {
+        GmailPasswordSheet(
+            initialEmail = settings.accountEmail.orEmpty(),
+            state = imapAuthState,
+            onSubmit = viewModel::signInWithAppPassword,
+            onDismiss = {
+                showImapSheet = false
+                viewModel.resetImapAuthState()
+            },
+            onGoogleSignIn = {
+                showImapSheet = false
+                viewModel.resetImapAuthState()
+                connect()
+            },
         )
     }
 }
@@ -170,10 +207,26 @@ private fun MainScaffold(
     syncState: SyncUiState,
     snackbarHostState: SnackbarHostState,
     connect: () -> Unit,
+    mailConnect: () -> Unit,
+    onUseAppPassword: () -> Unit,
+    onSmsToggle: (Boolean) -> Unit,
+    sharedImport: SharedEmailImport?,
+    onConsumeSharedImport: () -> Unit,
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var selectedEpochDay by rememberSaveable { mutableLongStateOf(LocalDate.now().toEpochDay()) }
     var editorTarget by remember { mutableStateOf<EditorTarget?>(null) }
+
+    LaunchedEffect(sharedImport) {
+        val incoming = sharedImport ?: return@LaunchedEffect
+        tab = 0
+        editorTarget = EditorTarget(
+            order = null,
+            initialDate = incoming.draft.promisedDate ?: LocalDate.now(),
+            initialDraft = incoming.draft,
+        )
+        onConsumeSharedImport()
+    }
 
     val selectedDate = LocalDate.ofEpochDay(selectedEpochDay)
     val syncing = syncState is SyncUiState.Syncing || syncState is SyncUiState.Connecting
@@ -232,7 +285,7 @@ private fun MainScaffold(
                     syncing = syncing,
                     accountEmail = settings.accountEmail,
                     authNeeded = settings.authNeeded,
-                    onConnect = connect,
+                    onConnect = mailConnect,
                     onAdd = { editorTarget = EditorTarget(null, selectedDate) },
                     lastSyncAt = settings.lastSyncAt,
                 )
@@ -254,6 +307,8 @@ private fun MainScaffold(
                     syncMessage = syncMessage,
                     onSync = { viewModel.syncNow(announce = true) },
                     onConnect = connect,
+                    onUseAppPassword = onUseAppPassword,
+                    onSmsToggle = onSmsToggle,
                     onDisconnect = viewModel::signOutGmail,
                     onAutoSync = viewModel::setAutoSync,
                     onNotifications = viewModel::setNotificationsEnabled,
@@ -270,6 +325,7 @@ private fun MainScaffold(
         OrderEditorSheet(
             order = target.order,
             initialDate = target.initialDate,
+            initialDraft = target.initialDraft,
             onDismiss = { editorTarget = null },
             onSave = { draft -> viewModel.saveOrder(target.order, draft) },
             onDelete = target.order?.let { order -> { viewModel.deleteOrder(order) } },

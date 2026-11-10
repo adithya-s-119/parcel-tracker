@@ -176,8 +176,9 @@ class ImapGmailClient {
             "package",
             "parcel",
         )
-        val subjectTerm = keywords.drop(1).fold<SearchTerm>(SubjectTerm(keywords.first())) { term, keyword ->
-            OrTerm(term, SubjectTerm(keyword))
+        var subjectTerm: SearchTerm = SubjectTerm(keywords.first())
+        for (keyword in keywords.drop(1)) {
+            subjectTerm = OrTerm(subjectTerm, SubjectTerm(keyword))
         }
         return AndTerm(
             subjectTerm,

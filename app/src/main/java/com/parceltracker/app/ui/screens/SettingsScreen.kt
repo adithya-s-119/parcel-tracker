@@ -1,5 +1,8 @@
 package com.parceltracker.app.ui.screens
 
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -24,6 +27,7 @@ import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.MailOutline
+import androidx.compose.material.icons.outlined.Message
 import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Sync
@@ -37,6 +41,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -51,10 +56,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.parceltracker.app.data.AppSettings
+import com.parceltracker.app.data.AuthMode
+import com.parceltracker.app.data.SmsPermission
 import com.parceltracker.app.ui.Dates
 import com.parceltracker.app.ui.components.GoogleGMark
 import com.parceltracker.app.ui.components.SignInHelpDialog
@@ -68,6 +77,8 @@ fun SettingsScreen(
     syncMessage: String?,
     onSync: () -> Unit,
     onConnect: () -> Unit,
+    onUseAppPassword: () -> Unit,
+    onSmsToggle: (Boolean) -> Unit,
     onDisconnect: () -> Unit,
     onAutoSync: (Boolean) -> Unit,
     onNotifications: (Boolean) -> Unit,
@@ -79,6 +90,23 @@ fun SettingsScreen(
     var showRebuildDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showSignInHelp by remember { mutableStateOf(false) }
+    var showShareHelp by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    val smsPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { result ->
+        val granted = result[Manifest.permission.READ_SMS] == true &&
+            result[Manifest.permission.RECEIVE_SMS] == true
+        onSmsToggle(granted)
+    }
+    val toggleSms: (Boolean) -> Unit = { enabled ->
+        when {
+            !enabled -> onSmsToggle(false)
+            SmsPermission.hasAll(context) -> onSmsToggle(true)
+            else -> smsPermissionLauncher.launch(SmsPermission.permissions)
+        }
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxWidth(),
@@ -114,6 +142,7 @@ fun SettingsScreen(
                 syncMessage = syncMessage,
                 onSync = onSync,
                 onConnect = onConnect,
+                onUseAppPassword = onUseAppPassword,
                 onDisconnect = onDisconnect,
             )
         }
@@ -200,6 +229,43 @@ fun SettingsScreen(
         }
 
         item {
+            SectionTitle("Delivery texts")
+        }
+
+        item {
+            Surface(
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            ) {
+                Column {
+                    SwitchRow(
+                        icon = Icons.Outlined.Message,
+                        title = "Read delivery texts",
+                        subtitle = "Find dates in SMS from stores and couriers",
+                        checked = settings.smsEnabled,
+                        onCheckedChange = toggleSms,
+                    )
+                    if (settings.smsEnabled) {
+                        SettingsDivider()
+                        ActionRow(
+                            icon = Icons.Outlined.Refresh,
+                            title = "Scan texts now",
+                            subtitle = "Check the SMS inbox for new deliveries",
+                            onClick = onSync,
+                        )
+                    }
+                    Text(
+                        text = "SMS is read on this device only. Google Play restricts SMS access; this build is for personal use.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp),
+                    )
+                }
+            }
+        }
+
+        item {
             SectionTitle("Reminders")
         }
 
@@ -259,6 +325,21 @@ fun SettingsScreen(
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             ) {
                 ActionRow(
+                    icon = Icons.Outlined.MailOutline,
+                    title = "Add from Gmail",
+                    subtitle = "Open an email → Share → Parcel",
+                    onClick = { showShareHelp = true },
+                )
+            }
+        }
+
+        item {
+            Surface(
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            ) {
+                ActionRow(
                     icon = Icons.Outlined.Info,
                     title = "Gmail sign-in help",
                     subtitle = "Package, SHA-1 and Play services status",
@@ -287,14 +368,14 @@ fun SettingsScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Parcel uses read-only Gmail access. Emails are parsed on this device. " +
-                                "No email content or account data is uploaded to a server.",
+                            text = "Parcel uses read-only Gmail access when connected, and can read delivery " +
+                                "texts on this device when enabled. Nothing is uploaded to a server.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Scope: gmail.readonly",
+                            text = "Scope: gmail.readonly · SMS stays on-device",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
                         )
@@ -343,6 +424,33 @@ fun SettingsScreen(
         SignInHelpDialog(onDismiss = { showSignInHelp = false })
     }
 
+    if (showShareHelp) {
+        AlertDialog(
+            onDismissRequest = { showShareHelp = false },
+            title = { Text("Add from Gmail") },
+            text = {
+                Column {
+                    Text("1. Open Gmail and choose an order or shipping email.")
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text("2. Tap the three-dot menu, then Share.")
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text("3. Choose Parcel.")
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text("4. Check the store, item and delivery date, then tap Add to calendar.")
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        "No Google Cloud, password or account connection is needed for this.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showShareHelp = false }) { Text("Got it") }
+            },
+        )
+    }
+
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
@@ -377,9 +485,15 @@ private fun AccountCard(
     syncMessage: String?,
     onSync: () -> Unit,
     onConnect: () -> Unit,
+    onUseAppPassword: () -> Unit,
     onDisconnect: () -> Unit,
 ) {
     val email = settings.accountEmail
+    val connectionLabel = when (settings.authMode) {
+        AuthMode.IMAP -> "Connected · App password"
+        AuthMode.OAUTH -> "Connected · Google sign-in"
+        AuthMode.NONE -> "Connected"
+    }
     Surface(
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surface,
@@ -427,7 +541,7 @@ private fun AccountCard(
                                 text = if (settings.authNeeded) {
                                     "Reconnect needed"
                                 } else {
-                                    "Connected · Gmail read-only"
+                                    connectionLabel
                                 },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (settings.authNeeded) {
@@ -481,7 +595,11 @@ private fun AccountCard(
                     }
                     if (settings.authNeeded) {
                         Button(
-                            onClick = onConnect,
+                            onClick = if (settings.authMode == AuthMode.IMAP) {
+                                onUseAppPassword
+                            } else {
+                                onConnect
+                            },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(14.dp),
                         ) {
@@ -523,8 +641,33 @@ private fun AccountCard(
                 ) {
                     GoogleGMark()
                     Spacer(modifier = Modifier.width(9.dp))
-                    Text("Connect Gmail", style = MaterialTheme.typography.titleMedium)
+                    Text("Sign in with Google", style = MaterialTheme.typography.titleMedium)
                 }
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = onUseAppPassword,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp),
+                    shape = RoundedCornerShape(15.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Lock,
+                        contentDescription = null,
+                        modifier = Modifier.size(17.dp),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Use Gmail app password",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                }
+                Text(
+                    text = "App-password sign-in needs no Google Cloud. You can also enable delivery texts below.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
             }
         }
     }

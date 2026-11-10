@@ -66,6 +66,7 @@ fun OnboardingScreen(
     syncMessage: String?,
     authError: String?,
     onConnect: () -> Unit,
+    onUseAppPassword: () -> Unit,
     onSkip: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
@@ -114,8 +115,8 @@ fun OnboardingScreen(
             Spacer(modifier = Modifier.height(26.dp))
             FeatureRow(
                 icon = Icons.Outlined.MailOutline,
-                title = "Gmail, read-only",
-                subtitle = "Only order and shipping emails are scanned.",
+                title = "Gmail or delivery texts",
+                subtitle = "Read-only email, or delivery SMS on this device.",
             )
             Spacer(modifier = Modifier.height(16.dp))
             FeatureRow(
@@ -163,6 +164,18 @@ fun OnboardingScreen(
                         style = MaterialTheme.typography.titleMedium,
                     )
                 }
+            }
+
+            TextButton(
+                onClick = onUseAppPassword,
+                enabled = !syncing,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = "Use a Gmail app password (no Google Cloud)",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = colors.onSurfaceVariant,
+                )
             }
 
             Row(

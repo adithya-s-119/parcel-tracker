@@ -71,18 +71,29 @@ fun OrderEditorSheet(
     initialDate: LocalDate,
     onDismiss: () -> Unit,
     onSave: (OrderDraft) -> Unit,
+    initialDraft: OrderDraft? = null,
     onDelete: (() -> Unit)? = null,
     onMarkDelivered: (() -> Unit)? = null,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    var merchant by remember(order) { mutableStateOf(order?.merchant.orEmpty()) }
-    var itemName by remember(order) { mutableStateOf(order?.itemName.orEmpty()) }
-    var orderNumber by remember(order) { mutableStateOf(order?.orderNumber.orEmpty()) }
-    var notes by remember(order) { mutableStateOf(order?.notes.orEmpty()) }
-    var status by remember(order) { mutableStateOf(order?.status ?: OrderStatus.UPCOMING) }
-    var date by remember(order) {
-        mutableStateOf(order?.promisedDate ?: initialDate)
+    var merchant by remember(order, initialDraft) {
+        mutableStateOf(order?.merchant ?: initialDraft?.merchant.orEmpty())
+    }
+    var itemName by remember(order, initialDraft) {
+        mutableStateOf(order?.itemName ?: initialDraft?.itemName.orEmpty())
+    }
+    var orderNumber by remember(order, initialDraft) {
+        mutableStateOf(order?.orderNumber ?: initialDraft?.orderNumber.orEmpty())
+    }
+    var notes by remember(order, initialDraft) {
+        mutableStateOf(order?.notes ?: initialDraft?.notes.orEmpty())
+    }
+    var status by remember(order, initialDraft) {
+        mutableStateOf(order?.status ?: initialDraft?.status ?: OrderStatus.UPCOMING)
+    }
+    var date by remember(order, initialDraft) {
+        mutableStateOf(order?.promisedDate ?: initialDraft?.promisedDate ?: initialDate)
     }
     var showDatePicker by remember { mutableStateOf(false) }
     var statusExpanded by remember { mutableStateOf(false) }
@@ -105,13 +116,21 @@ fun OrderEditorSheet(
             Row(verticalAlignment = Alignment.Top) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = if (order == null) "Add a delivery" else "Edit delivery",
+                        text = when {
+                            order != null -> "Edit delivery"
+                            initialDraft != null -> "Check this delivery"
+                            else -> "Add a delivery"
+                        },
                         style = MaterialTheme.typography.headlineMedium,
                         color = MaterialTheme.colorScheme.onBackground,
                     )
                     Spacer(modifier = Modifier.height(3.dp))
                     Text(
-                        text = "Keep the promised date honest.",
+                        text = if (initialDraft != null) {
+                            "We read the shared email. Check the details before adding it."
+                        } else {
+                            "Keep the promised date honest."
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

@@ -12,10 +12,16 @@ import com.parceltracker.app.ParcelApp
 import com.parceltracker.app.data.AppSettings
 import com.parceltracker.app.data.AuthDiagnostics
 import com.parceltracker.app.data.AuthError
+import com.parceltracker.app.data.AuthMode
 import com.parceltracker.app.data.DeliveryOrder
 import com.parceltracker.app.data.GmailAuthManager
-import com.parceltracker.app.data.GmailSyncManager
+import com.parceltracker.app.data.GmailMessage
+import com.parceltracker.app.data.ImapError
 import com.parceltracker.app.data.OrderDraft
+import com.parceltracker.app.data.OrderEmailParser
+import com.parceltracker.app.data.OrderStatus
+import com.parceltracker.app.data.SmsPermission
+import com.parceltracker.app.data.SyncResult
 import com.parceltracker.app.notifications.Notifications
 import com.parceltracker.app.widget.DeliveryWidget
 import com.parceltracker.app.work.WorkScheduler
@@ -30,6 +36,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 
 sealed interface SyncUiState {
     data object Idle : SyncUiState
@@ -40,6 +47,17 @@ sealed interface SyncUiState {
 sealed interface UiEvent {
     data class Message(val text: String) : UiEvent
 }
+
+data class SharedEmailImport(
+    val draft: OrderDraft,
+    val rawText: String,
+)
+
+data class ImapAuthUiState(
+    val loading: Boolean = false,
+    val error: String? = null,
+    val success: Boolean = false,
+)
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -61,8 +79,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _authError = MutableStateFlow<String?>(null)
     val authError: StateFlow<String?> = _authError.asStateFlow()
 
+    private val _imapAuthState = MutableStateFlow(ImapAuthUiState())
+    val imapAuthState: StateFlow<ImapAuthUiState> = _imapAuthState.asStateFlow()
+
     private val _events = MutableSharedFlow<UiEvent>(extraBufferCapacity = 8)
     val events = _events.asSharedFlow()
+
+    private val _sharedImport = MutableStateFlow<SharedEmailImport?>(null)
+    val sharedImport: StateFlow<SharedEmailImport?> = _sharedImport.asStateFlow()
 
     fun connect(
         uiContext: Context,
@@ -99,7 +123,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } catch (error: Exception) {
                 Log.e(TAG, "Gmail authorization request failed", error)
                 _syncState.value = SyncUiState.Idle
-                _authError.value = AuthError.message(error)
+                _authError.value = AuthError.message(
+                    error,
+                    AuthDiagnostics.signingSha1(getApplication()),
+                )
             }
         }
     }
@@ -145,14 +172,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun handleAuthorizationFailure(error: Throwable?) {
         Log.e(TAG, "Google authorization failed", error)
-        _authError.value = error?.let { AuthError.message(it) }
-            ?: "Google returned an empty sign-in result. Check Google Play services and the OAuth client setup, then try again."
+        _authError.value = error?.let {
+            AuthError.message(it, AuthDiagnostics.signingSha1(getApplication()))
+        } ?: "Google returned an empty sign-in result. Check Google Play services and the OAuth client setup, then try again."
     }
 
     private suspend fun finishConnect(token: String) {
         _syncState.value = SyncUiState.Connecting
         try {
             val email = container.gmailApi.getProfileEmail(token)
+            container.credentialStore.clearAppPassword()
+            container.settingsStore.setAuthMode(AuthMode.OAUTH)
             container.settingsStore.setAccount(email)
             container.settingsStore.setOnboardingComplete(true)
             container.settingsStore.setAuthNeeded(false)
@@ -161,7 +191,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             syncNow(announce = true)
         } catch (error: Exception) {
             _syncState.value = SyncUiState.Idle
-            _authError.value = AuthError.message(error)
+            _authError.value = AuthError.message(
+                error,
+                AuthDiagnostics.signingSha1(getApplication()),
+            )
         }
     }
 
@@ -177,7 +210,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             result.onSuccess { syncResult ->
                 _syncState.value = SyncUiState.Idle
-                if (syncResult.outcome == GmailSyncManager.SyncResult.Outcome.NEEDS_AUTH) {
+                if (syncResult.outcome == SyncResult.Outcome.NEEDS_AUTH) {
                     _authError.value = syncResult.message
                 }
                 if (announce || syncResult.tracked > 0 || syncResult.updated > 0) {
@@ -198,12 +231,72 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun handleSharedText(subject: String, text: String) {
+        val raw = text.trim()
+        if (raw.isBlank()) return
+
+        val fallbackSubject = raw.lineSequence()
+            .map { it.trim() }
+            .firstOrNull { it.isNotBlank() }
+            ?.take(120)
+            ?: "Shared email"
+        val shareSubject = subject.trim().ifBlank { fallbackSubject }
+
+        val message = GmailMessage(
+            id = "shared-${System.currentTimeMillis()}",
+            threadId = "",
+            subject = shareSubject,
+            from = "",
+            receivedDate = LocalDate.now(),
+            receivedEpochMillis = System.currentTimeMillis(),
+            snippet = raw.take(220),
+            bodyText = raw,
+        )
+        val parsed = runCatching { OrderEmailParser.parse(message) }.getOrNull()
+        val merchant = parsed?.merchant?.takeIf { it != "Unknown store" }
+            ?: OrderEmailParser.guessMerchant("$shareSubject\n$raw")
+            ?: "Shared email"
+
+        _sharedImport.value = SharedEmailImport(
+            draft = OrderDraft(
+                merchant = merchant,
+                itemName = parsed?.itemName ?: shareSubject,
+                promisedDate = parsed?.promisedDate ?: LocalDate.now(),
+                status = parsed?.status ?: OrderStatus.UPCOMING,
+                orderNumber = parsed?.orderNumber,
+                notes = "Imported from a shared email.",
+            ),
+            rawText = raw,
+        )
+
+        viewModelScope.launch {
+            container.settingsStore.setOnboardingComplete(true)
+        }
+    }
+
+    fun consumeSharedImport() {
+        _sharedImport.value = null
+    }
+
     fun onAppStart() {
         val current = settings.value
-        if (!current.onboardingComplete || current.accountEmail == null) return
-        if (!current.autoSync || current.authNeeded) return
+        if (!current.onboardingComplete) return
+        if (!current.autoSync) return
+
+        val hasMail = current.accountEmail != null
+        val hasSms = current.smsEnabled && SmsPermission.hasReadAccess(getApplication())
+        if (!hasMail && !hasSms) return
+        if (hasMail && current.authNeeded && !hasSms) return
         if (System.currentTimeMillis() - current.lastSyncAt < 15 * 60 * 1000L) return
         syncNow(announce = false)
+    }
+
+    fun setSmsEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            container.settingsStore.setSmsEnabled(enabled)
+            WorkScheduler.apply(getApplication(), container.settingsStore.settings.first())
+            if (enabled) syncNow(announce = true)
+        }
     }
 
     fun setAutoSync(enabled: Boolean) {
@@ -227,8 +320,49 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun signInWithAppPassword(rawEmail: String, rawPassword: String) {
+        if (_imapAuthState.value.loading) return
+
+        val email = rawEmail.trim()
+        val password = rawPassword.replace(" ", "").trim()
+        if (!email.contains("@")) {
+            _imapAuthState.value = ImapAuthUiState(error = "Enter your full Gmail address.")
+            return
+        }
+        if (password.length < 8) {
+            _imapAuthState.value = ImapAuthUiState(
+                error = "Enter the 16-character Google app password.",
+            )
+            return
+        }
+
+        viewModelScope.launch {
+            _imapAuthState.value = ImapAuthUiState(loading = true)
+            try {
+                container.imapClient.verifyCredentials(email, password)
+                container.authManager.signOut()
+                container.credentialStore.saveAppPassword(password)
+                container.settingsStore.setAuthMode(AuthMode.IMAP)
+                container.settingsStore.setAccount(email)
+                container.settingsStore.setOnboardingComplete(true)
+                container.settingsStore.setAuthNeeded(false)
+                WorkScheduler.apply(getApplication(), container.settingsStore.settings.first())
+                _imapAuthState.value = ImapAuthUiState(success = true)
+                syncNow(announce = true)
+            } catch (error: Exception) {
+                Log.e(TAG, "Gmail app-password sign-in failed", error)
+                _imapAuthState.value = ImapAuthUiState(error = ImapError.message(error))
+            }
+        }
+    }
+
+    fun resetImapAuthState() {
+        if (!_imapAuthState.value.loading) _imapAuthState.value = ImapAuthUiState()
+    }
+
     fun signOutGmail() {
         container.authManager.signOut()
+        container.credentialStore.clearAppPassword()
         viewModelScope.launch {
             container.settingsStore.clearAccount()
             WorkScheduler.cancelSync(getApplication())
@@ -240,6 +374,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteAllData() {
         container.authManager.signOut()
+        container.credentialStore.clearAppPassword()
         viewModelScope.launch {
             container.database.orderDao().deleteAll()
             container.database.orderDao().clearScannedEmails()

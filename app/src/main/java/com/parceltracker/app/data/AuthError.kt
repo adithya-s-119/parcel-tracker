@@ -5,13 +5,21 @@ import com.parceltracker.app.BuildConfig
 
 object AuthError {
 
-    fun message(error: Throwable): String {
+    fun message(error: Throwable, signingSha1: String? = null): String {
         val api = error as? ApiException
         if (api != null) {
             return when (api.statusCode) {
                 10 -> "Google sign-in isn't configured for this build. Create an Android OAuth client for ${BuildConfig.APPLICATION_ID} with this app's signing SHA-1, enable the Gmail API, add the gmail.readonly scope, then reinstall."
                 7 -> "No network connection. Check your connection and try again."
-                8 -> "Google Play services had an internal error. Update Google Play services, make sure a Google account is added to the device, reboot, then try again. Emulators must use a Google Play system image."
+                8 -> {
+                    val detail = api.message.orEmpty()
+                    if (detail.contains("UNREGISTERED_ON_API_CONSOLE", ignoreCase = true)) {
+                        val sha = signingSha1 ?: "shown in Sign-in help"
+                        "Google doesn't recognize this app's OAuth client. In Google Cloud Console, create an Android OAuth client for package ${BuildConfig.APPLICATION_ID} with SHA-1 $sha. Enable the Gmail API, add the gmail.readonly scope, then try again."
+                    } else {
+                        "Google Play services had an internal error. Update Google Play services, make sure a Google account is added to the device, reboot, then try again. Emulators must use a Google Play system image."
+                    }
+                }
                 16 -> "Google Play services is unavailable right now. Try again in a moment."
                 12500 -> "Google sign-in failed. Check that Google Play services is available, the Gmail API is enabled, and your account is a test user on the OAuth consent screen."
                 12501 -> "Google sign-in was cancelled. If you didn't cancel it, open Sign-in help to check Play services, the package name and SHA-1."

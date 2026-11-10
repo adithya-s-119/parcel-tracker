@@ -12,6 +12,7 @@ class MailSyncCoordinator(
     private val settingsStore: SettingsStore,
     private val oauthSync: GmailSyncManager,
     private val imapSync: ImapSyncManager,
+    private val smsSync: SmsSyncManager,
 ) {
 
     private val mutex = Mutex()
@@ -21,13 +22,49 @@ class MailSyncCoordinator(
         progress: (String) -> Unit = {},
     ): SyncResult = mutex.withLock {
         val settings = settingsStore.settings.first()
-        when (settings.authMode) {
+
+        val mailResult = when (settings.authMode) {
             AuthMode.OAUTH -> oauthSync.sync(fullRescan, progress)
             AuthMode.IMAP -> imapSync.sync(fullRescan, progress)
-            AuthMode.NONE -> SyncResult(
+            AuthMode.NONE -> null
+        }
+        val smsResult = if (settings.smsEnabled) {
+            smsSync.sync(fullRescan, progress)
+        } else {
+            null
+        }
+
+        val results = listOfNotNull(mailResult, smsResult)
+        if (results.isEmpty()) {
+            return@withLock SyncResult(
                 SyncResult.Outcome.NEEDS_AUTH,
-                message = "Connect Gmail to start syncing.",
+                message = "Connect Gmail or turn on delivery texts to start syncing.",
             )
         }
+
+        val outcome = when {
+            results.any { it.outcome == SyncResult.Outcome.SUCCESS } ->
+                SyncResult.Outcome.SUCCESS
+            results.any { it.outcome == SyncResult.Outcome.NEEDS_AUTH } ->
+                SyncResult.Outcome.NEEDS_AUTH
+            else -> SyncResult.Outcome.FAILED
+        }
+        val message = results
+            .map { it.message }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .joinToString(" ")
+        val combined = SyncResult(
+            outcome = outcome,
+            scanned = results.sumOf { it.scanned },
+            tracked = results.sumOf { it.tracked },
+            updated = results.sumOf { it.updated },
+            message = message,
+        )
+
+        if (outcome == SyncResult.Outcome.SUCCESS) {
+            settingsStore.setLastSync(System.currentTimeMillis(), message)
+        }
+        combined
     }
 }

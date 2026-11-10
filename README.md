@@ -5,6 +5,9 @@ A quiet Android app that reads your order emails, finds the promised delivery da
 ## What it does
 
 - **Connect Gmail** with read-only access (`gmail.readonly`). Nothing is sent, edited, or deleted.
+- **Or use a Gmail app password + IMAP** — free, automatic, and no Google Cloud project.
+- **Or skip email entirely** and share an order email to Parcel, or add deliveries by hand.
+- **Read delivery texts (SMS)** on-device to catch courier and store delivery updates.
 - **Scans order and shipping emails** from Amazon, Flipkart, Myntra, Ajio, Meesho, Nykaa, Croma, eBay, Etsy, Walmart, and more.
 - **Extracts the promised delivery date** from natural language:
   - `Arriving Thursday, November 12`
@@ -45,7 +48,42 @@ A quiet Android app that reads your order emails, finds the promised delivery da
 - Android Studio (Ladybug or newer) or the Android command-line SDK
 - JDK 17+
 
-## Google Cloud setup (required for Gmail sign-in)
+## Three ways to fill your calendar
+
+| Mode | Needs Google Cloud? | What you need | Automatic? |
+| --- | --- | --- | --- |
+| Google sign-in (OAuth) | Yes, one-time setup | Normal Google account + 2FA | Yes |
+| Gmail app password (IMAP) | No | 2-Step Verification + a 16-character app password | Yes |
+| Share-to-Parcel / manual | No | Nothing | Per email / manual |
+
+### Gmail app password + IMAP (free, no Google Cloud)
+
+This is the free automatic path that avoids OAuth and Google Cloud.
+
+1. Turn on **2-Step Verification** in your Google Account.
+2. Open **App passwords** (`https://myaccount.google.com/apppasswords`).
+3. Create one named **Parcel** and copy the 16-character password.
+4. In Parcel, open **Settings → Use Gmail app password**, enter your Gmail address and the app password.
+
+Parcel connects to `imap.gmail.com` over TLS, opens Gmail **read-only**, and scans for order emails. The app password is encrypted with a key in the Android Keystore and can be revoked at any time.
+
+App passwords are not available for every account: work/school accounts, Advanced Protection accounts, and accounts without 2FA may not offer them. In those cases, use Google sign-in or Share-to-Parcel.
+
+### Delivery texts (SMS)
+
+Parcel can read delivery-related SMS from stores and couriers such as Amazon, Flipkart, Delhivery, Blue Dart, Ekart, DTDC, FedEx, and India Post.
+
+Enable **Settings → Delivery texts**. Android will ask for SMS permission. Messages are parsed on-device and never uploaded.
+
+> SMS access is a restricted permission. This build is intended for personal sideloading. Google Play requires a policy declaration and approval for apps that read SMS.
+
+### Share to Parcel (zero setup)
+
+Open an order email in Gmail → **Share** → **Parcel**. The app reads the shared email, extracts the store, item, order number, and delivery date, then opens a confirmation sheet.
+
+No Google account, password, or Cloud project is needed for this mode.
+
+## Google Cloud setup (optional, for Google sign-in)
 
 Parcel identifies itself with an **Android OAuth client**. There is no client ID in the source code — Google matches the package name and signing certificate.
 
@@ -140,23 +178,27 @@ Unit tests cover Amazon, Flipkart, ranges, return-window avoidance, relative dat
 
 ## Background sync
 
-- A WorkManager job checks Gmail every 6 hours when automatic sync is on.
-- Access tokens are kept in memory. When the app reopens, Google Identity Services silently re-authorizes using the saved account. If consent has expired, the calendar shows a **Reconnect** banner.
+- A WorkManager job checks Gmail (OAuth or IMAP) and SMS every 6 hours when automatic sync is on.
+- OAuth access tokens are kept in memory. When the app reopens, Google Identity Services silently re-authorizes using the saved account. If consent has expired, the calendar shows a **Reconnect** banner.
+- In app-password mode, the 16-character password is encrypted with an Android Keystore key and used only for read-only IMAP. It is never logged or uploaded.
 - Reminder notifications are scheduled daily at 9 AM local time. Android 13+ asks for notification permission.
 
 ## Privacy
 
 - No server, no analytics, no third-party email processing.
-- Gmail data is read through the official API with read-only scope.
-- Emails and delivery records are stored in a local Room database.
-- The access token lives in memory only.
-- **Delete all data** in Settings removes the database, Gmail connection, and settings.
+- Gmail is read through the official API (read-only scope) or IMAP (read-only folder), depending on the sign-in mode.
+- Delivery SMS is read on-device only.
+- Emails, texts, and delivery records are stored in a local Room database.
+- OAuth access tokens live in memory only; the IMAP app password is encrypted at rest with Android Keystore.
+- **Delete all data** in Settings removes the database, account connection, SMS settings, and app settings.
 
 ## Limitations
 
-- Date extraction is rule-based; unusual email layouts may be missed. Every delivery can be edited manually.
-- The Gmail query uses the `Purchases` category plus order/shipping subject terms over the chosen scan window (90 / 180 / 365 days).
-- Background sync needs the OAuth consent to still be valid; otherwise open the app and reconnect.
+- Date extraction is rule-based; unusual email or SMS layouts may be missed. Every delivery can be edited manually.
+- The Gmail API query uses the `Purchases` category plus order/shipping subject terms over the chosen scan window (90 / 180 / 365 days).
+- IMAP searches Gmail's All Mail folder over the same window. It requires an app password.
+- SMS scanning requires the READ_SMS/RECEIVE_SMS permissions and is best suited to personal sideloaded builds.
+- Background OAuth sync needs the consent to still be valid; otherwise open the app and reconnect.
 - The release build is not minified by default. Add your release signing config and enable shrinking when you ship it.
 
 ## Project structure

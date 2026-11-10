@@ -2,6 +2,7 @@ package com.parceltracker.app.data
 
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 import java.util.Locale
 import kotlin.math.abs
@@ -161,7 +162,35 @@ object OrderEmailParser {
         val score: Int,
     )
 
-    fun parse(message: GmailMessage): ParsedOrder? {
+    fun parse(message: GmailMessage): ParsedOrder? = parseInternal(message, relaxed = false)
+
+    /**
+     * SMS bodies are shorter and often lack phrases like "your order". Accept a
+     * plausible date/status/sender without the stricter email gate.
+     */
+    fun parseSms(address: String, body: String, receivedDate: LocalDate): ParsedOrder? {
+        val text = body.trim()
+        if (text.isBlank()) return null
+        val firstLine = text.lineSequence()
+            .firstOrNull { it.isNotBlank() }
+            ?.take(120)
+            ?: "Delivery text"
+        val message = GmailMessage(
+            id = "",
+            threadId = "",
+            subject = firstLine,
+            from = address,
+            receivedDate = receivedDate,
+            receivedEpochMillis = receivedDate.atStartOfDay(ZoneId.systemDefault())
+                .toInstant()
+                .toEpochMilli(),
+            snippet = text.take(220),
+            bodyText = text,
+        )
+        return parseInternal(message, relaxed = true)
+    }
+
+    private fun parseInternal(message: GmailMessage, relaxed: Boolean): ParsedOrder? {
         val body = if (HtmlText.looksLikeHtml(message.bodyText)) {
             HtmlText.toPlain(message.bodyText)
         } else {
@@ -189,8 +218,11 @@ object OrderEmailParser {
 
         val hasOrderCue = orderNumber != null
         val hasDate = promisedDate != null
-        val isOrderEmail = hasOrderCue ||
-            (orderEvidence && (hasDate || status != OrderStatus.UPCOMING))
+        val isOrderEmail = if (relaxed) {
+            hasOrderCue || hasDate || status != OrderStatus.UPCOMING
+        } else {
+            hasOrderCue || (orderEvidence && (hasDate || status != OrderStatus.UPCOMING))
+        }
 
         if (!isOrderEmail) return null
 
@@ -518,6 +550,11 @@ object OrderEmailParser {
         if (value.length < 3) return null
         if (value.lowercase(Locale.ENGLISH) in GENERIC_ITEM_VALUES) return null
         return value.take(100)
+    }
+
+    fun guessMerchant(text: String): String? {
+        val lower = text.lowercase(Locale.ENGLISH)
+        return knownMerchants.firstOrNull { (key, _) -> lower.contains(key) }?.second
     }
 
     private fun merchantFor(from: String): String {

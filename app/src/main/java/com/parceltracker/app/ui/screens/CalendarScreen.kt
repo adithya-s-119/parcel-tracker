@@ -95,7 +95,7 @@ fun CalendarScreen(
     val subtitle = when {
         authNeeded -> "Gmail needs a quick reconnect."
         syncing -> "Checking your inbox…"
-        accountEmail == null -> "Add deliveries by hand, or connect Gmail."
+        accountEmail == null -> "Connect Gmail, or add deliveries by hand."
         lastSyncAt > 0L -> Dates.syncSubtitle(lastSyncAt)
         else -> "Your calendar, minus the noise."
     }
@@ -193,7 +193,7 @@ fun CalendarScreen(
                     EmptyState(
                         icon = Icons.Outlined.Inventory2,
                         title = "Your calendar is quiet",
-                        message = "Connect Gmail to find order dates automatically, or add a delivery by hand.",
+                        message = "Connect Gmail to find order dates automatically, share an order email, or add a delivery by hand.",
                         actionLabel = "Add a delivery",
                         onAction = onAdd,
                         modifier = Modifier.padding(horizontal = 22.dp, vertical = 26.dp),
@@ -291,7 +291,7 @@ private fun ConnectBanner(
                     text = if (authNeeded) {
                         "Your saved deliveries are safe. Reconnect for updates."
                     } else {
-                        "Connect to fill the calendar automatically."
+                        "Connect to fill the calendar automatically, or share an order email."
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f),

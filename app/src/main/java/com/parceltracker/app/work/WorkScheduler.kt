@@ -20,7 +20,9 @@ object WorkScheduler {
     fun apply(context: Context, settings: AppSettings) {
         val workManager = WorkManager.getInstance(context)
 
-        if (settings.autoSync && settings.accountEmail != null) {
+        if (settings.autoSync &&
+            (settings.accountEmail != null || settings.smsEnabled)
+        ) {
             val request = PeriodicWorkRequestBuilder<GmailSyncWorker>(6, TimeUnit.HOURS)
                 .setConstraints(
                     Constraints.Builder()
