@@ -10,7 +10,8 @@ Parcel reads order and shipping emails and delivery texts, finds the promised da
 [![Kotlin](https://img.shields.io/badge/Kotlin-Compose-7F52FF?style=flat-square&logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![Material 3](https://img.shields.io/badge/UI-Material%203-4285F4?style=flat-square&logo=materialdesign&logoColor=white)](https://m3.material.io)
 [![On-device](https://img.shields.io/badge/Privacy-on--device-2E7D32?style=flat-square&logo=shield&logoColor=white)](#privacy)
-[![Private preview](https://img.shields.io/badge/status-private%20preview-8A5A44?style=flat-square)](https://github.com/adithya-s-119/parcel-tracker)
+[![License: MIT](https://img.shields.io/badge/license-MIT-2E7D32?style=flat-square)](LICENSE)
+[![Release](https://img.shields.io/badge/release-v1.0-8A5A44?style=flat-square)](https://github.com/adithya-s-119/parcel-tracker/releases/latest)
 
 </div>
 
@@ -98,6 +99,16 @@ Enable **Settings → Read delivery texts** and grant SMS permission. Messages a
 
 > SMS is a restricted Android permission. This build is intended for personal sideloading; publishing on Google Play requires a separate SMS policy declaration and approval.
 
+## Install
+
+Download the latest APK from **[Releases](https://github.com/adithya-s-119/parcel-tracker/releases/latest)**, then sideload it on Android 8.0 or newer:
+
+```powershell
+adb install -r Parcel-v1.0.apk
+```
+
+The release APK is a personal-sideload build. SMS access is restricted by Google Play policy, so Parcel is distributed outside the Play Store.
+
 ## Build from source
 
 **Requirements:** JDK 17+, Android SDK 35, Android 8.0+ device or emulator.
@@ -136,6 +147,10 @@ The debug APK is written to `app/build/outputs/apk/debug/app-debug.apk`.
 
 The project is intentionally small and serverless: the phone does the parsing, and the only network calls are read-only Gmail requests.
 
+## License
+
+MIT © 2026 Adithya S. See [LICENSE](LICENSE).
+
 ## Limitations
 
 - Date extraction is rule-based. Unusual email layouts can be missed, and every delivery can be edited manually.
@@ -157,6 +172,6 @@ The project is intentionally small and serverless: the phone does the parsing, a
 
 **Parcel** — built for calm arrivals.
 
-Private preview · not affiliated with Google, Amazon, Flipkart, or any courier.
+Open source under the MIT License · not affiliated with Google, Amazon, Flipkart, or any courier.
 
 </div>
