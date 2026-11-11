@@ -77,7 +77,11 @@ class ImapSyncManager(
                 }
 
                 val alreadyScanned = dao.scannedIds(refs.map { it.id }).toSet()
-                val pending = refs.filterNot { it.id in alreadyScanned }
+                // New orders matter most. Work through the backlog newest-first
+                // so a fresh Flipkart/Amazon email is never stuck behind old mail.
+                val pending = refs
+                    .filterNot { it.id in alreadyScanned }
+                    .sortedByDescending { it.receivedEpochMillis }
                 val toFetch = pending.take(MAX_MESSAGES_PER_SYNC)
 
                 if (toFetch.isEmpty()) {
