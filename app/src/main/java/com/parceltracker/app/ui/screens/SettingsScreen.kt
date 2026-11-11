@@ -164,7 +164,7 @@ fun SettingsScreen(
                     SwitchRow(
                         icon = Icons.Outlined.Sync,
                         title = "Automatic sync",
-                        subtitle = "Check all Gmail accounts every 6 hours",
+                        subtitle = "Check all inboxes every 6 hours",
                         checked = settings.autoSync,
                         onCheckedChange = onAutoSync,
                     )
