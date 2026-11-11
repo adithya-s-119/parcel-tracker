@@ -39,6 +39,7 @@ Online orders are scattered across Gmail, SMS, courier updates, and six differen
 ### Track automatically
 
 - **Gmail app password.** Connect over IMAP in about a minute — no Google Cloud project, no OAuth client, no billing.
+- **Multiple Gmail accounts.** Add every inbox you order from; Parcel scans them together and merges duplicate deliveries.
 - **Delivery SMS.** Reads courier and store texts on-device, including India Post, Delhivery, Blue Dart, DTDC, Ekart, XpressBees, Shadowfax, and more.
 - **Share to Parcel.** Open any order email → Share → Parcel when you want to add one manually.
 - **60+ stores and couriers**, including Amazon, Flipkart, Myntra, Ajio, Meesho, Nykaa, Croma, Tata CLiQ, Reliance Digital, JioMart, DMart, FirstCry, Lenskart, Pepperfry, Vijay Sales, Sangeetha Mobiles, Bajaj Electronics, Robu, Robocraze, Hubtronics, Xcluma, Probots, Sharvie Electronics, FlyRobo, Robokits, ThinkRobotics, RhydoLABZ, Quartz Components, element14, Mouser, DigiKey, AliExpress, Newegg, B&H Photo, Costco, Wayfair, and more.
@@ -86,8 +87,9 @@ The parser is deliberately conservative: it prefers an explicit delivery phrase 
 1. Turn on **2-Step Verification** for your Google account.
 2. Create an **App password** at `myaccount.google.com/apppasswords`.
 3. In Parcel: **Settings → Connect Gmail with app password**, then enter your Gmail address and the 16-character password.
+4. Repeat with **Add account** for any other Gmail inbox you want Parcel to scan.
 
-Parcel connects to `imap.gmail.com` over TLS, opens Gmail read-only, and scans order mail. The password is encrypted with an Android Keystore key and can be revoked from Google at any time.
+Parcel connects to `imap.gmail.com` over TLS, opens each Gmail account read-only, and scans order mail. Every password is encrypted with an Android Keystore key and can be revoked from Google at any time.
 
 ### Option B — No email at all
 
@@ -131,7 +133,7 @@ The debug APK is written to `app/build/outputs/apk/debug/app-debug.apk`.
 - Gmail is read through a read-only IMAP folder. Nothing is sent, edited, or deleted.
 - Delivery SMS is read on-device only.
 - Emails, texts, and deliveries live in a local Room database.
-- The IMAP app password is encrypted at rest with Android Keystore.
+- Every IMAP app password is encrypted at rest with Android Keystore.
 - **Delete all data** in Settings removes the database, account connection, SMS settings, and app preferences.
 
 ## Architecture

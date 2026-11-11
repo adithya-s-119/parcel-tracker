@@ -9,17 +9,19 @@ import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import java.io.IOException
+import java.util.Locale
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "parcel_settings")
 
 data class AppSettings(
-    val accountEmail: String? = null,
+    val accountEmails: List<String> = emptyList(),
     val authMode: AuthMode = AuthMode.NONE,
     val onboardingComplete: Boolean = false,
     val autoSync: Boolean = true,
@@ -30,12 +32,15 @@ data class AppSettings(
     val lastSyncSummary: String? = null,
     val authNeeded: Boolean = false,
     val accent: ParcelAccent = ParcelAccent.FOREST,
-)
+) {
+    val accountEmail: String? get() = accountEmails.firstOrNull()
+}
 
 class SettingsStore(private val context: Context) {
 
     private object Keys {
         val ACCOUNT_EMAIL = stringPreferencesKey("account_email")
+        val ACCOUNT_EMAILS = stringSetPreferencesKey("account_emails")
         val AUTH_MODE = stringPreferencesKey("auth_mode")
         val ONBOARDING_COMPLETE = booleanPreferencesKey("onboarding_complete")
         val AUTO_SYNC = booleanPreferencesKey("auto_sync")
@@ -53,16 +58,16 @@ class SettingsStore(private val context: Context) {
             if (error is IOException) emit(emptyPreferences()) else throw error
         }
         .map { prefs ->
-            val email = prefs[Keys.ACCOUNT_EMAIL]
-            // Google Cloud/OAuth sign-in is no longer offered. Treat any old
-            // OAuth preference as disconnected so the app-password flow is used.
-            val storedMode = prefs[Keys.AUTH_MODE]
-                ?.let { stored -> runCatching { AuthMode.valueOf(stored) }.getOrNull() }
-            val authMode = if (storedMode == AuthMode.IMAP) AuthMode.IMAP else AuthMode.NONE
+            val legacyEmail = prefs[Keys.ACCOUNT_EMAIL]
+            val accountEmails = (prefs[Keys.ACCOUNT_EMAILS].orEmpty() + listOfNotNull(legacyEmail))
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinctBy { it.lowercase(Locale.ENGLISH) }
+                .sortedBy { it.lowercase(Locale.ENGLISH) }
 
             AppSettings(
-                accountEmail = email,
-                authMode = authMode,
+                accountEmails = accountEmails,
+                authMode = if (accountEmails.isEmpty()) AuthMode.NONE else AuthMode.IMAP,
                 onboardingComplete = prefs[Keys.ONBOARDING_COMPLETE] ?: false,
                 autoSync = prefs[Keys.AUTO_SYNC] ?: true,
                 notificationsEnabled = prefs[Keys.NOTIFICATIONS] ?: true,
@@ -76,9 +81,33 @@ class SettingsStore(private val context: Context) {
         }
         .distinctUntilChanged()
 
-    suspend fun setAccount(email: String?) {
+    suspend fun addAccount(email: String) {
         context.dataStore.edit { prefs ->
-            if (email == null) prefs.remove(Keys.ACCOUNT_EMAIL) else prefs[Keys.ACCOUNT_EMAIL] = email
+            val accounts = (prefs[Keys.ACCOUNT_EMAILS].orEmpty() +
+                listOfNotNull(prefs[Keys.ACCOUNT_EMAIL], email))
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinctBy { it.lowercase(Locale.ENGLISH) }
+            prefs[Keys.ACCOUNT_EMAILS] = accounts.toSet()
+            prefs.remove(Keys.ACCOUNT_EMAIL)
+            prefs[Keys.AUTH_MODE] = AuthMode.IMAP.name
+            prefs[Keys.AUTH_NEEDED] = false
+        }
+    }
+
+    suspend fun removeAccount(email: String) {
+        context.dataStore.edit { prefs ->
+            val accounts = (prefs[Keys.ACCOUNT_EMAILS].orEmpty() +
+                listOfNotNull(prefs[Keys.ACCOUNT_EMAIL]))
+                .filterNot { it.equals(email, ignoreCase = true) }
+            if (accounts.isEmpty()) {
+                prefs.remove(Keys.ACCOUNT_EMAILS)
+                prefs.remove(Keys.AUTH_MODE)
+                prefs[Keys.AUTH_NEEDED] = false
+            } else {
+                prefs[Keys.ACCOUNT_EMAILS] = accounts.toSet()
+            }
+            prefs.remove(Keys.ACCOUNT_EMAIL)
         }
     }
 
@@ -128,6 +157,7 @@ class SettingsStore(private val context: Context) {
     suspend fun clearAccount() {
         context.dataStore.edit { prefs ->
             prefs.remove(Keys.ACCOUNT_EMAIL)
+            prefs.remove(Keys.ACCOUNT_EMAILS)
             prefs.remove(Keys.AUTH_MODE)
             prefs[Keys.AUTH_NEEDED] = false
         }

@@ -182,9 +182,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _syncState.value = SyncUiState.Connecting
         try {
             val email = container.gmailApi.getProfileEmail(token)
-            container.credentialStore.clearAppPassword()
+            container.credentialStore.clearAllAppPasswords()
             container.settingsStore.setAuthMode(AuthMode.OAUTH)
-            container.settingsStore.setAccount(email)
+            container.settingsStore.addAccount(email)
             container.settingsStore.setOnboardingComplete(true)
             container.settingsStore.setAuthNeeded(false)
             _authError.value = null
@@ -287,7 +287,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val hasMail = current.accountEmail != null
         val hasSms = current.smsEnabled && SmsPermission.hasReadAccess(getApplication())
         if (!hasMail && !hasSms) return
-        if (hasMail && current.authNeeded && !hasSms) return
+        if (hasMail && current.authNeeded && !hasSms && current.accountEmails.size <= 1) return
         if (System.currentTimeMillis() - current.lastSyncAt < 15 * 60 * 1000L) return
         syncNow(announce = false)
     }
@@ -349,9 +349,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 container.imapClient.verifyCredentials(email, password)
                 container.authManager.signOut()
-                container.credentialStore.saveAppPassword(password)
+                // Before the first multi-account add, move the old single-account
+                // password onto the existing account's key.
+                container.settingsStore.settings.first().accountEmail
+                    ?.let { container.credentialStore.migrateLegacy(it) }
+                container.credentialStore.saveAppPassword(email, password)
                 container.settingsStore.setAuthMode(AuthMode.IMAP)
-                container.settingsStore.setAccount(email)
+                container.settingsStore.addAccount(email)
                 container.settingsStore.setOnboardingComplete(true)
                 container.settingsStore.setAuthNeeded(false)
                 WorkScheduler.apply(getApplication(), container.settingsStore.settings.first())
@@ -368,21 +372,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (!_imapAuthState.value.loading) _imapAuthState.value = ImapAuthUiState()
     }
 
-    fun signOutGmail() {
-        container.authManager.signOut()
-        container.credentialStore.clearAppPassword()
+    fun removeGmailAccount(email: String) {
         viewModelScope.launch {
-            container.settingsStore.clearAccount()
-            WorkScheduler.cancelSync(getApplication())
+            container.credentialStore.removeAppPassword(email)
+            container.settingsStore.removeAccount(email)
+            if (container.settingsStore.settings.first().accountEmails.isEmpty()) {
+                WorkScheduler.cancelSync(getApplication())
+            }
+            DeliveryWidget.refresh(getApplication())
             _events.emit(
-                UiEvent.Message("Gmail disconnected. Your saved deliveries are still here."),
+                UiEvent.Message("$email disconnected. Saved deliveries are still here."),
             )
         }
     }
 
     fun deleteAllData() {
         container.authManager.signOut()
-        container.credentialStore.clearAppPassword()
+        container.credentialStore.clearAllAppPasswords()
         viewModelScope.launch {
             container.database.orderDao().deleteAll()
             container.database.orderDao().clearScannedEmails()

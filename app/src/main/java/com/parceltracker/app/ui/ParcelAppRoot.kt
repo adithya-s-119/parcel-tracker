@@ -71,10 +71,14 @@ fun ParcelAppRoot(viewModel: MainViewModel) {
     val imapAuthState by viewModel.imapAuthState.collectAsStateWithLifecycle()
 
     var showImapSheet by rememberSaveable { mutableStateOf(false) }
-    val openImapSheet: () -> Unit = {
+    var imapInitialEmail by rememberSaveable { mutableStateOf("") }
+    val openImapSheet: (String) -> Unit = { initialEmail ->
         viewModel.resetImapAuthState()
+        imapInitialEmail = initialEmail
         showImapSheet = true
     }
+    val addAccount: () -> Unit = { openImapSheet("") }
+    val reconnectAccount: () -> Unit = { openImapSheet(settings.accountEmail.orEmpty()) }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
@@ -129,7 +133,7 @@ fun ParcelAppRoot(viewModel: MainViewModel) {
                 else -> null
             },
             authError = authError,
-            onUseAppPassword = openImapSheet,
+            onUseAppPassword = addAccount,
             onSkip = viewModel::continueWithoutGmail,
         )
     } else {
@@ -139,7 +143,9 @@ fun ParcelAppRoot(viewModel: MainViewModel) {
             orders = orders,
             syncState = syncState,
             snackbarHostState = snackbarHostState,
-            onUseAppPassword = openImapSheet,
+            onUseAppPassword = reconnectAccount,
+            onAddAccount = addAccount,
+            onRemoveAccount = viewModel::removeGmailAccount,
             onSmsToggle = viewModel::setSmsEnabled,
             sharedImport = sharedImport,
             onConsumeSharedImport = viewModel::consumeSharedImport,
@@ -148,7 +154,7 @@ fun ParcelAppRoot(viewModel: MainViewModel) {
 
     if (showImapSheet) {
         GmailPasswordSheet(
-            initialEmail = settings.accountEmail.orEmpty(),
+            initialEmail = imapInitialEmail,
             state = imapAuthState,
             onSubmit = viewModel::signInWithAppPassword,
             onDismiss = {
@@ -167,6 +173,8 @@ private fun MainScaffold(
     syncState: SyncUiState,
     snackbarHostState: SnackbarHostState,
     onUseAppPassword: () -> Unit,
+    onAddAccount: () -> Unit,
+    onRemoveAccount: (String) -> Unit,
     onSmsToggle: (Boolean) -> Unit,
     sharedImport: SharedEmailImport?,
     onConsumeSharedImport: () -> Unit,
@@ -241,7 +249,11 @@ private fun MainScaffold(
                     },
                     onSync = { viewModel.syncNow(announce = true) },
                     syncing = syncing,
-                    accountEmail = settings.accountEmail,
+                    accountEmail = if (settings.accountEmails.size > 1) {
+                        "${settings.accountEmails.size} Gmail accounts"
+                    } else {
+                        settings.accountEmail
+                    },
                     authNeeded = settings.authNeeded,
                     onConnect = onUseAppPassword,
                     onAdd = { editorTarget = EditorTarget(null, selectedDate) },
@@ -265,8 +277,9 @@ private fun MainScaffold(
                     syncMessage = syncMessage,
                     onSync = { viewModel.syncNow(announce = true) },
                     onUseAppPassword = onUseAppPassword,
+                    onAddAccount = onAddAccount,
+                    onRemoveAccount = onRemoveAccount,
                     onSmsToggle = onSmsToggle,
-                    onDisconnect = viewModel::signOutGmail,
                     onAutoSync = viewModel::setAutoSync,
                     onNotifications = viewModel::setNotificationsEnabled,
                     onScanDays = viewModel::setScanDays,

@@ -1,6 +1,7 @@
 package com.parceltracker.app.data
 
 import kotlinx.coroutines.flow.first
+import java.util.Locale
 
 class ImapSyncManager(
     private val client: ImapGmailClient,
@@ -16,19 +17,15 @@ class ImapSyncManager(
         progress: (String) -> Unit = {},
     ): SyncResult {
         val settings = settingsStore.settings.first()
-        val email = settings.accountEmail
-            ?: return SyncResult(
+        val accounts = settings.accountEmails
+            .distinctBy { it.lowercase(Locale.ENGLISH) }
+
+        if (accounts.isEmpty()) {
+            return SyncResult(
                 SyncResult.Outcome.NEEDS_AUTH,
                 message = "Connect Gmail to start syncing.",
             )
-        val appPassword = credentialStore.getAppPassword()
-            ?: run {
-                settingsStore.setAuthNeeded(true)
-                return SyncResult(
-                    SyncResult.Outcome.NEEDS_AUTH,
-                    message = "The Gmail app password is missing. Sign in again.",
-                )
-            }
+        }
 
         if (fullRescan) {
             progress("Clearing previous results…")
@@ -36,103 +33,156 @@ class ImapSyncManager(
             dao.deleteAllGmailOrders()
         }
 
-        progress("Connecting to Gmail…")
-        val refs = try {
-            client.listMessages(
-                email = email,
-                appPassword = appPassword,
-                scanDays = settings.scanDays,
+        // Move a password saved by a single-account build onto its account key.
+        settings.accountEmail?.let { credentialStore.migrateLegacy(it) }
+
+        var totalScanned = 0
+        var totalTracked = 0
+        var totalUpdated = 0
+        var successfulAccounts = 0
+        val failedAccounts = mutableListOf<String>()
+        var allFailedForAuth = false
+
+        accounts.forEachIndexed { index, email ->
+            progress(
+                if (accounts.size == 1) "Connecting to Gmail…"
+                else "Connecting to $email (${index + 1}/${accounts.size})…",
             )
-        } catch (error: Exception) {
-            return failure(error)
-        }
 
-        if (refs.isEmpty()) {
-            settingsStore.setAuthNeeded(false)
-            val summary = "No order emails found in the last ${settings.scanDays} days."
-            settingsStore.setLastSync(System.currentTimeMillis(), summary)
-            onDataChanged()
-            return SyncResult(SyncResult.Outcome.SUCCESS, message = summary)
-        }
-
-        val alreadyScanned = dao.scannedIds(refs.map { it.id }).toSet()
-        val pending = refs.filterNot { it.id in alreadyScanned }
-        val toFetch = pending.take(MAX_MESSAGES_PER_SYNC)
-
-        if (toFetch.isEmpty()) {
-            settingsStore.setAuthNeeded(false)
-            val summary = "No new order emails since the last sync."
-            settingsStore.setLastSync(System.currentTimeMillis(), summary)
-            onDataChanged()
-            return SyncResult(SyncResult.Outcome.SUCCESS, message = summary)
-        }
-
-        progress("Reading ${toFetch.size} new emails…")
-        val messages = try {
-            client.fetchMessages(email, appPassword, toFetch) { read, total ->
-                progress("Reading emails $read/$total…")
+            val appPassword = credentialStore.getAppPassword(email)
+            if (appPassword == null) {
+                failedAccounts += email
+                allFailedForAuth = true
+                return@forEachIndexed
             }
-        } catch (error: Exception) {
-            return failure(error)
-        }
 
-        var tracked = 0
-        var updated = 0
-
-        messages.forEach { message ->
-            val parsed = runCatching { OrderEmailParser.parse(message) }.getOrNull()
-            if (parsed != null) {
-                when (repository.mergeGmail(parsed, message.id, message.threadId, message.receivedEpochMillis, source = "IMAP")) {
-                    OrderRepository.MergeResult.INSERTED -> tracked++
-                    OrderRepository.MergeResult.UPDATED -> updated++
-                    OrderRepository.MergeResult.IGNORED -> Unit
+            try {
+                val refs = client.listMessages(
+                    email = email,
+                    appPassword = appPassword,
+                    scanDays = settings.scanDays,
+                ).map { ref ->
+                    // UID space is per mailbox. Scope IDs so two Gmail accounts
+                    // cannot collide in the scanned table or order IDs.
+                    ref.copy(
+                        id = scopedId(email, ref.uid),
+                        threadId = scopedThreadId(email, ref.uid),
+                    )
                 }
+
+                totalScanned += refs.size
+                if (refs.isEmpty()) {
+                    successfulAccounts++
+                    return@forEachIndexed
+                }
+
+                val alreadyScanned = dao.scannedIds(refs.map { it.id }).toSet()
+                val pending = refs.filterNot { it.id in alreadyScanned }
+                val toFetch = pending.take(MAX_MESSAGES_PER_SYNC)
+
+                if (toFetch.isEmpty()) {
+                    successfulAccounts++
+                    return@forEachIndexed
+                }
+
+                progress(
+                    if (accounts.size == 1) "Reading ${toFetch.size} new emails…"
+                    else "$email: reading ${toFetch.size} emails…",
+                )
+                val messages = try {
+                    client.fetchMessages(email, appPassword, toFetch) { read, total ->
+                        progress(
+                            if (accounts.size == 1) "Reading emails $read/$total…"
+                            else "$email: reading $read/$total…",
+                        )
+                    }
+                } catch (error: Exception) {
+                    failedAccounts += email
+                    if (ImapError.isAuthenticationFailure(error)) allFailedForAuth = true
+                    return@forEachIndexed
+                }
+
+                messages.forEach { message ->
+                    val parsed = runCatching { OrderEmailParser.parse(message) }.getOrNull()
+                    if (parsed != null) {
+                        when (
+                            repository.mergeGmail(
+                                parsed,
+                                message.id,
+                                message.threadId,
+                                message.receivedEpochMillis,
+                                source = "IMAP",
+                            )
+                        ) {
+                            OrderRepository.MergeResult.INSERTED -> totalTracked++
+                            OrderRepository.MergeResult.UPDATED -> totalUpdated++
+                            OrderRepository.MergeResult.IGNORED -> Unit
+                        }
+                    }
+                }
+
+                dao.markScanned(messages.map { ScannedEmail(it.id) })
+                successfulAccounts++
+            } catch (error: Exception) {
+                failedAccounts += email
+                if (ImapError.isAuthenticationFailure(error)) allFailedForAuth = true
             }
         }
 
-        dao.markScanned(messages.map { ScannedEmail(it.id) })
-
-        val summary = when {
-            tracked == 0 && updated == 0 -> {
-                "Checked ${refs.size} emails — no new deliveries."
+        if (successfulAccounts == 0) {
+            settingsStore.setAuthNeeded(allFailedForAuth)
+            return if (allFailedForAuth) {
+                SyncResult(
+                    SyncResult.Outcome.NEEDS_AUTH,
+                    message = "Some Gmail accounts need reconnecting.",
+                )
+            } else {
+                SyncResult(
+                    SyncResult.Outcome.FAILED,
+                    message = "Couldn't reach Gmail. Check your connection.",
+                )
             }
-
-            tracked > 0 && updated > 0 -> "Added $tracked deliveries · updated $updated."
-            tracked > 0 -> "Added $tracked new ${if (tracked == 1) "delivery" else "deliveries"}."
-            else -> "Updated $updated ${if (updated == 1) "delivery" else "deliveries"}."
-        } + if (pending.size > toFetch.size) {
-            " More emails will be checked next sync."
-        } else {
-            ""
         }
 
-        settingsStore.setAuthNeeded(false)
+        val summary = buildString {
+            when {
+                totalTracked == 0 && totalUpdated == 0 -> append("Checked Gmail — no new deliveries.")
+                totalTracked > 0 && totalUpdated > 0 ->
+                    append("Added $totalTracked deliveries · updated $totalUpdated.")
+                totalTracked > 0 ->
+                    append("Added $totalTracked new ${if (totalTracked == 1) "delivery" else "deliveries"}.")
+                else ->
+                    append("Updated $totalUpdated ${if (totalUpdated == 1) "delivery" else "deliveries"}.")
+            }
+            if (accounts.size > 1) append(" Scanned ${accounts.size} accounts.")
+            if (failedAccounts.isNotEmpty()) {
+                append(
+                    " ${failedAccounts.size} ${if (failedAccounts.size == 1) "account needs" else "accounts need"} attention.",
+                )
+            }
+        }
+
+        settingsStore.setAuthNeeded(failedAccounts.isNotEmpty())
         settingsStore.setLastSync(System.currentTimeMillis(), summary)
         onDataChanged()
 
         return SyncResult(
             outcome = SyncResult.Outcome.SUCCESS,
-            scanned = refs.size,
-            tracked = tracked,
-            updated = updated,
+            scanned = totalScanned,
+            tracked = totalTracked,
+            updated = totalUpdated,
             message = summary,
         )
     }
 
-    private suspend fun failure(error: Exception): SyncResult {
-        return if (ImapError.isAuthenticationFailure(error)) {
-            settingsStore.setAuthNeeded(true)
-            SyncResult(
-                SyncResult.Outcome.NEEDS_AUTH,
-                message = ImapError.message(error),
-            )
-        } else {
-            SyncResult(
-                SyncResult.Outcome.FAILED,
-                message = ImapError.message(error),
-            )
-        }
-    }
+    private fun scopedId(email: String, uid: Long): String =
+        "imap-${accountKey(email)}-$uid"
+
+    private fun scopedThreadId(email: String, uid: Long): String =
+        "imap-thread-${accountKey(email)}-$uid"
+
+    private fun accountKey(email: String): String =
+        email.trim().lowercase(Locale.ENGLISH).hashCode().toUInt().toString(16)
 
     companion object {
         private const val MAX_MESSAGES_PER_SYNC = 100

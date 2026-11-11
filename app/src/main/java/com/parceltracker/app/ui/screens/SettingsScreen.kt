@@ -28,6 +28,7 @@ import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material.icons.outlined.Message
 import androidx.compose.material.icons.outlined.NotificationsNone
@@ -43,6 +44,7 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -78,8 +80,9 @@ fun SettingsScreen(
     syncMessage: String?,
     onSync: () -> Unit,
     onUseAppPassword: () -> Unit,
+    onAddAccount: () -> Unit,
+    onRemoveAccount: (String) -> Unit,
     onSmsToggle: (Boolean) -> Unit,
-    onDisconnect: () -> Unit,
     onAutoSync: (Boolean) -> Unit,
     onNotifications: (Boolean) -> Unit,
     onScanDays: (Int) -> Unit,
@@ -128,7 +131,7 @@ fun SettingsScreen(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Tune how Parcel watches your inbox.",
+                    text = "Tune how Parcel watches your inboxes.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -142,7 +145,8 @@ fun SettingsScreen(
                 syncMessage = syncMessage,
                 onSync = onSync,
                 onUseAppPassword = onUseAppPassword,
-                onDisconnect = onDisconnect,
+                onAddAccount = onAddAccount,
+                onRemoveAccount = onRemoveAccount,
             )
         }
 
@@ -160,7 +164,7 @@ fun SettingsScreen(
                     SwitchRow(
                         icon = Icons.Outlined.Sync,
                         title = "Automatic sync",
-                        subtitle = "Check Gmail every 6 hours",
+                        subtitle = "Check all Gmail accounts every 6 hours",
                         checked = settings.autoSync,
                         onCheckedChange = onAutoSync,
                     )
@@ -573,84 +577,131 @@ private fun AccountCard(
     syncMessage: String?,
     onSync: () -> Unit,
     onUseAppPassword: () -> Unit,
-    onDisconnect: () -> Unit,
+    onAddAccount: () -> Unit,
+    onRemoveAccount: (String) -> Unit,
 ) {
-    val email = settings.accountEmail?.takeIf { settings.authMode != AuthMode.NONE }
-    val connectionLabel = if (settings.authMode == AuthMode.IMAP) {
-        "Connected · App password"
-    } else {
-        "Connected"
-    }
+    val accounts = settings.accountEmails
+    var removeTarget by remember { mutableStateOf<String?>(null) }
+
     Surface(
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Column(modifier = Modifier.padding(18.dp)) {
-            if (email != null) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
+            if (accounts.isEmpty()) {
+                Text(
+                    text = "Connect your Gmail",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Parcel reads order and shipping emails to fill your calendar. " +
+                        "It never sends, edits or deletes anything.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(modifier = Modifier.height(14.dp))
+                Button(
+                    onClick = onAddAccount,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp),
+                    shape = RoundedCornerShape(15.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                    ),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Lock,
+                        contentDescription = null,
+                        modifier = Modifier.size(17.dp),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Connect Gmail with app password",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                }
+                Text(
+                    text = "Free, read-only access with a Gmail app password. You can add more " +
+                        "accounts later and enable delivery texts below.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            } else {
+                Text(
+                    text = if (accounts.size == 1) "Connected account" else "Connected accounts",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(modifier = Modifier.height(3.dp))
+                Text(
+                    text = "Parcel scans ${if (accounts.size == 1) "this inbox" else "all ${accounts.size} inboxes"} " +
+                        "and merges duplicate deliveries.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+                accounts.forEach { email ->
+                    Row(
                         modifier = Modifier
-                            .size(46.dp)
-                            .background(MaterialTheme.colorScheme.primary, CircleShape),
-                        contentAlignment = Alignment.Center,
+                            .fillMaxWidth()
+                            .padding(vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
-                            text = email.firstOrNull()?.uppercase() ?: "G",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = email,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(5.dp)
-                                    .background(
-                                        if (settings.authNeeded) {
-                                            MaterialTheme.colorScheme.error
-                                        } else {
-                                            MaterialTheme.colorScheme.primary
-                                        },
-                                        CircleShape,
-                                    ),
-                            )
-                            Spacer(modifier = Modifier.width(5.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .background(MaterialTheme.colorScheme.primary, CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
                             Text(
-                                text = if (settings.authNeeded) {
-                                    "Reconnect needed"
-                                } else {
-                                    connectionLabel
-                                },
+                                text = email.firstOrNull()?.uppercase() ?: "G",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = email,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = "App password · read-only",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = if (settings.authNeeded) {
-                                    MaterialTheme.colorScheme.error
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        IconButton(onClick = { removeTarget = email }) {
+                            Icon(
+                                imageVector = Icons.Outlined.Close,
+                                contentDescription = "Remove $email",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp),
                             )
                         }
                     }
                 }
 
                 if (settings.authNeeded) {
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Your saved deliveries are still here. Reconnect to check for updates.",
+                        text = "An account needs reconnecting. Saved deliveries are still here.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = MaterialTheme.colorScheme.error,
                     )
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilledTonalButton(
                         onClick = onSync,
@@ -680,68 +731,58 @@ private fun AccountCard(
                             Text("Sync now")
                         }
                     }
-                    if (settings.authNeeded) {
-                        Button(
-                            onClick = onUseAppPassword,
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(14.dp),
-                        ) {
-                            Text("Reconnect")
-                        }
-                    } else {
-                        TextButton(onClick = onDisconnect) {
-                            Text(
-                                text = "Disconnect",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
+                    OutlinedButton(
+                        onClick = onAddAccount,
+                        enabled = !syncing,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(14.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Add,
+                            contentDescription = null,
+                            modifier = Modifier.size(17.dp),
+                        )
+                        Spacer(modifier = Modifier.width(7.dp))
+                        Text("Add account")
                     }
                 }
-            } else {
-                Text(
-                    text = "Connect your Gmail",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Parcel reads order and shipping emails to fill your calendar. " +
-                        "It never sends, edits or deletes anything.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(modifier = Modifier.height(14.dp))
-                Button(
-                    onClick = onUseAppPassword,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp),
-                    shape = RoundedCornerShape(15.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary,
-                    ),
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Lock,
-                        contentDescription = null,
-                        modifier = Modifier.size(17.dp),
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Connect Gmail with app password",
-                        style = MaterialTheme.typography.titleMedium,
-                    )
+
+                if (settings.authNeeded) {
+                    TextButton(
+                        onClick = onUseAppPassword,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Reconnect an account")
+                    }
                 }
-                Text(
-                    text = "Free, read-only access with a Gmail app password. No Google Cloud project needed. " +
-                        "You can also enable delivery texts below.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
             }
         }
+    }
+
+    removeTarget?.let { email ->
+        AlertDialog(
+            onDismissRequest = { removeTarget = null },
+            title = { Text("Remove account?") },
+            text = {
+                Text(
+                    "Stop scanning $email? Saved deliveries will stay on this phone, " +
+                        "but new updates from this account will not be checked.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onRemoveAccount(email)
+                        removeTarget = null
+                    },
+                ) {
+                    Text("Remove", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { removeTarget = null }) { Text("Cancel") }
+            },
+        )
     }
 }
 

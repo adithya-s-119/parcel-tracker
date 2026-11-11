@@ -5,6 +5,8 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import java.security.KeyStore
+import java.security.MessageDigest
+import java.util.Locale
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -20,20 +22,43 @@ class SecureCredentialStore(context: Context) {
         .getSharedPreferences("parcel_secure_credentials", Context.MODE_PRIVATE)
 
     @Synchronized
-    fun saveAppPassword(password: String) {
+    fun saveAppPassword(email: String, password: String) {
         val encrypted = encrypt(password)
-        prefs.edit().putString(KEY_APP_PASSWORD, encrypted).apply()
+        prefs.edit().putString(keyFor(email), encrypted).apply()
     }
 
     @Synchronized
-    fun getAppPassword(): String? {
-        val stored = prefs.getString(KEY_APP_PASSWORD, null) ?: return null
+    fun getAppPassword(email: String): String? {
+        val stored = prefs.getString(keyFor(email), null) ?: return null
         return runCatching { decrypt(stored) }.getOrNull()
     }
 
     @Synchronized
-    fun clearAppPassword() {
+    fun removeAppPassword(email: String) {
+        prefs.edit().remove(keyFor(email)).apply()
+    }
+
+    /** Moves the single-account password from older builds to its account key. */
+    @Synchronized
+    fun migrateLegacy(email: String) {
+        val legacy = prefs.getString(KEY_APP_PASSWORD, null) ?: return
+        if (!prefs.contains(keyFor(email))) {
+            runCatching { decrypt(legacy) }.getOrNull()
+                ?.let { saveAppPassword(email, it) }
+        }
         prefs.edit().remove(KEY_APP_PASSWORD).apply()
+    }
+
+    @Synchronized
+    fun clearAllAppPasswords() {
+        prefs.edit().clear().apply()
+    }
+
+    private fun keyFor(email: String): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(email.trim().lowercase(Locale.ENGLISH).toByteArray(Charsets.UTF_8))
+        val suffix = digest.joinToString("") { "%02x".format(it) }.take(32)
+        return KEY_APP_PASSWORD_PREFIX + suffix
     }
 
     private fun encrypt(value: String): String {
@@ -87,5 +112,6 @@ class SecureCredentialStore(context: Context) {
         private const val KEY_ALIAS = "parcel_gmail_app_password"
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
         private const val KEY_APP_PASSWORD = "gmail_app_password"
+        private const val KEY_APP_PASSWORD_PREFIX = "gmail_app_password_"
     }
 }
