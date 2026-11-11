@@ -81,7 +81,11 @@ class ImapSyncManager(
                 // so a fresh Flipkart/Amazon email is never stuck behind old mail.
                 val pending = refs
                     .filterNot { it.id in alreadyScanned }
-                    .sortedByDescending { it.receivedEpochMillis }
+                    .sortedWith(
+                        compareByDescending<ImapGmailClient.MessageRef> {
+                            isPriorityStore(it.from)
+                        }.thenByDescending { it.receivedEpochMillis },
+                    )
                 val toFetch = pending.take(MAX_MESSAGES_PER_SYNC)
 
                 if (toFetch.isEmpty()) {
@@ -178,6 +182,11 @@ class ImapSyncManager(
             message = summary,
         )
     }
+
+    private fun isPriorityStore(from: String): Boolean =
+        OrderEmailParser.PRIORITY_STORE_DOMAINS.any {
+            from.contains(it, ignoreCase = true)
+        }
 
     private fun scopedId(email: String, uid: Long): String =
         "imap-${accountKey(email)}-$uid"

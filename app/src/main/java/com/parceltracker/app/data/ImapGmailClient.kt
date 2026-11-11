@@ -195,30 +195,39 @@ class ImapGmailClient {
      */
     private fun gmailRawSearch(folder: IMAPFolder, scanDays: Int): LongArray {
         val days = scanDays.coerceIn(30, 365)
-        val query = "(category:purchases OR subject:order OR subject:delivery " +
-            "OR subject:shipped OR subject:arriving OR subject:dispatched " +
-            "OR ${OrderEmailParser.HOBBY_STORE_QUERY}) " +
-            "${OrderEmailParser.NON_DELIVERY_QUERY} " +
-            "newer_than:${days}d -category:promotions -category:social -category:forums"
-        val escaped = query.replace("\\", "\\\\").replace("\"", "\\\"")
-        var found = LongArray(0)
+        val queries = listOf(
+            "(category:purchases OR subject:order OR subject:delivery " +
+                "OR subject:shipped OR subject:arriving OR subject:dispatched " +
+                "OR ${OrderEmailParser.HOBBY_STORE_QUERY}) " +
+                "${OrderEmailParser.NON_DELIVERY_QUERY} " +
+                "newer_than:${days}d -category:promotions -category:social -category:forums",
+            // Store receipts can land in Promotions. Search these trusted
+            // domains directly so order confirmations are not skipped.
+            "(${OrderEmailParser.PRIORITY_STORE_QUERY}) " +
+                "newer_than:${days}d -in:spam -in:trash " +
+                "-category:social -category:forums",
+        )
 
-        folder.doCommand { protocol ->
-            val responses = protocol.command("UID SEARCH X-GM-RAW \"$escaped\"", null)
-            val uids = mutableListOf<Long>()
-            for (response in responses) {
-                val text = response.toString()
-                val idx = text.indexOf("SEARCH", ignoreCase = true)
-                if (idx < 0) continue
-                text.substring(idx + "SEARCH".length)
-                    .trim()
-                    .split(Regex("\\s+"))
-                    .mapNotNullTo(uids) { it.toLongOrNull() }
+        val found = mutableSetOf<Long>()
+        for (query in queries) {
+            val escaped = query.replace("\\", "\\\\").replace("\"", "\\\"")
+            val queryUids = mutableListOf<Long>()
+            folder.doCommand { protocol ->
+                val responses = protocol.command("UID SEARCH X-GM-RAW \"$escaped\"", null)
+                for (response in responses) {
+                    val text = response.toString()
+                    val idx = text.indexOf("SEARCH", ignoreCase = true)
+                    if (idx < 0) continue
+                    text.substring(idx + "SEARCH".length)
+                        .trim()
+                        .split(Regex("\\s+"))
+                        .mapNotNullTo(queryUids) { it.toLongOrNull() }
+                }
+                responses
             }
-            found = uids.takeLast(500).toLongArray()
-            responses
+            found.addAll(queryUids)
         }
-        return found
+        return found.sorted().takeLast(500).toLongArray()
     }
 
     private fun buildSearchTerm(scanDays: Int): SearchTerm {
@@ -273,6 +282,10 @@ class ImapGmailClient {
                         }
                     }
                     when {
+                        // Some retail mail has a stub plain-text part ("Flipkart")
+                        // while the HTML part contains the order details.
+                        html.isNotBlank() && (plain.isBlank() || html.length > plain.length * 2) ->
+                            html.toString()
                         plain.isNotBlank() -> plain.toString()
                         html.isNotBlank() -> html.toString()
                         else -> ""

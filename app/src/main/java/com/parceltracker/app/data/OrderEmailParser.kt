@@ -136,6 +136,25 @@ object OrderEmailParser {
     )
     val HOBBY_STORE_QUERY = HOBBY_STORE_DOMAINS.joinToString(" OR ") { "from:$it" }
 
+    /**
+     * Gmail sometimes files transactional store mail under Promotions. These
+     * domains get a second search that ignores the category exclusion, while
+     * the parser still rejects actual marketing mail.
+     */
+    val PRIORITY_STORE_DOMAINS = listOf(
+        "flipkart.com",
+        "myntra.com",
+        "ajio.com",
+        "tatacliq.com",
+        "nykaa.com",
+        "croma.com",
+        "reliancedigital.in",
+        "jiomart.com",
+        "dmart.in",
+        "snapdeal.com",
+    )
+    val PRIORITY_STORE_QUERY = PRIORITY_STORE_DOMAINS.joinToString(" OR ") { "from:$it" }
+
     /** Cinema and event bookings have dates, but they are not deliveries. */
     val NON_DELIVERY_DOMAINS = listOf(
         "bookmyshow.com",
