@@ -65,6 +65,7 @@ fun CalendarScreen(
     selectedDate: LocalDate,
     onDateSelected: (LocalDate) -> Unit,
     onOrderClick: (DeliveryOrder) -> Unit,
+    onMarkDelivered: (DeliveryOrder) -> Unit,
     onSync: () -> Unit,
     syncing: Boolean,
     accountEmail: String?,
@@ -206,7 +207,11 @@ fun CalendarScreen(
             }
         } else {
             items(selectedOrders, key = { it.id }) { order ->
-                OrderCard(order = order, onClick = { onOrderClick(order) })
+                OrderCard(
+                    order = order,
+                    onClick = { onOrderClick(order) },
+                    onMarkDelivered = { onMarkDelivered(order) },
+                )
             }
         }
 
@@ -216,7 +221,11 @@ fun CalendarScreen(
                 SectionLabel(text = "Coming up")
             }
             items(upcoming, key = { "upcoming-${it.id}" }) { order ->
-                OrderCard(order = order, onClick = { onOrderClick(order) })
+                OrderCard(
+                    order = order,
+                    onClick = { onOrderClick(order) },
+                    onMarkDelivered = { onMarkDelivered(order) },
+                )
             }
         }
     }

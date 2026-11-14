@@ -369,7 +369,7 @@ fun OrderEditorSheet(
                                 modifier = Modifier.size(17.dp),
                             )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Delivered")
+                            Text("Mark delivered")
                         }
                     }
                     if (onDelete != null) {

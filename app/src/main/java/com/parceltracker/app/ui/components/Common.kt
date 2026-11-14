@@ -17,9 +17,11 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -132,6 +134,7 @@ fun OrderCard(
     order: DeliveryOrder,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onMarkDelivered: (() -> Unit)? = null,
 ) {
     Surface(
         onClick = onClick,
@@ -178,6 +181,19 @@ fun OrderCard(
                             modifier = Modifier.weight(1f, fill = false),
                         )
                     }
+                }
+            }
+            if (order.isActive && onMarkDelivered != null) {
+                IconButton(
+                    onClick = onMarkDelivered,
+                    modifier = Modifier.size(38.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.CheckCircle,
+                        contentDescription = "Mark as delivered",
+                        tint = statusColor(OrderStatus.DELIVERED),
+                        modifier = Modifier.size(22.dp),
+                    )
                 }
             }
             Spacer(modifier = Modifier.width(4.dp))

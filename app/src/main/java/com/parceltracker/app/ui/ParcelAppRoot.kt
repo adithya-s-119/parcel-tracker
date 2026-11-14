@@ -247,6 +247,7 @@ private fun MainScaffold(
                             initialDate = order.promisedDate ?: selectedDate,
                         )
                     },
+                    onMarkDelivered = viewModel::markDelivered,
                     onSync = { viewModel.syncNow(announce = true) },
                     syncing = syncing,
                     accountEmail = if (settings.accountEmails.size > 1) {
@@ -268,6 +269,7 @@ private fun MainScaffold(
                             initialDate = order.promisedDate ?: LocalDate.now(),
                         )
                     },
+                    onMarkDelivered = viewModel::markDelivered,
                     onAdd = { editorTarget = EditorTarget(null, LocalDate.now()) },
                 )
 

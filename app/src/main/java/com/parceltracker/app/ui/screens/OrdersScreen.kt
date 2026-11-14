@@ -66,6 +66,7 @@ private enum class OrderFilter(val label: String) {
 fun OrdersScreen(
     orders: List<DeliveryOrder>,
     onOrderClick: (DeliveryOrder) -> Unit,
+    onMarkDelivered: (DeliveryOrder) -> Unit,
     onAdd: () -> Unit,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
@@ -250,7 +251,11 @@ fun OrdersScreen(
                 )
             }
             items(active, key = { it.id }) { order ->
-                OrderCard(order = order, onClick = { onOrderClick(order) })
+                OrderCard(
+                    order = order,
+                    onClick = { onOrderClick(order) },
+                    onMarkDelivered = { onMarkDelivered(order) },
+                )
             }
         }
 
