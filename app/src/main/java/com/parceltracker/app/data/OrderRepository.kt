@@ -59,6 +59,10 @@ class OrderRepository(private val dao: OrderDao) {
         )
     }
 
+    suspend fun restore(order: DeliveryOrder) {
+        dao.update(order.copy(updatedAt = System.currentTimeMillis()))
+    }
+
     suspend fun delete(order: DeliveryOrder) {
         dao.deleteById(order.id)
     }

@@ -11,7 +11,7 @@ Parcel reads order and shipping emails and delivery texts, finds the promised da
 [![Material 3](https://img.shields.io/badge/UI-Material%203-4285F4?style=flat-square&logo=materialdesign&logoColor=white)](https://m3.material.io)
 [![On-device](https://img.shields.io/badge/Privacy-on--device-2E7D32?style=flat-square&logo=shield&logoColor=white)](#privacy)
 [![License: MIT](https://img.shields.io/badge/license-MIT-2E7D32?style=flat-square)](LICENSE)
-[![Release](https://img.shields.io/badge/release-v1.2-8A5A44?style=flat-square)](https://github.com/adithya-s-119/parcel-tracker/releases/latest)
+[![Release](https://img.shields.io/badge/release-v1.2.1-8A5A44?style=flat-square)](https://github.com/adithya-s-119/parcel-tracker/releases/latest)
 
 </div>
 
@@ -48,7 +48,7 @@ Online orders are scattered across Gmail, SMS, courier updates, and six differen
 ### Stay ahead
 
 - **Calendar view** with delivery dots, month navigation, and a day-by-day list.
-- **Orders view** with search, delivery-status filters, manual edits, and one-tap **Mark delivered** on active orders.
+- **Orders view** with search, delivery-status filters, manual edits, and one-tap **Mark delivered** with an **Undo** action.
 - **Real status tracking**:
 
 | Status | Meaning |
@@ -106,7 +106,7 @@ Enable **Settings → Read delivery texts** and grant SMS permission. Messages a
 Download the latest APK from **[Releases](https://github.com/adithya-s-119/parcel-tracker/releases/latest)**, then sideload it on Android 8.0 or newer:
 
 ```powershell
-adb install -r Parcel-v1.2.apk
+adb install -r Parcel-v1.2.1.apk
 ```
 
 The release APK is a personal-sideload build. SMS access is restricted by Google Play policy, so Parcel is distributed outside the Play Store.

@@ -47,6 +47,7 @@ sealed interface SyncUiState {
 
 sealed interface UiEvent {
     data class Message(val text: String) : UiEvent
+    data class UndoDelivered(val text: String) : UiEvent
 }
 
 data class SharedEmailImport(
@@ -63,6 +64,7 @@ data class ImapAuthUiState(
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val container = (application as ParcelApp).container
+    private var lastDeliveredUndo: DeliveryOrder? = null
 
     private val _ready = MutableStateFlow(false)
     val ready: StateFlow<Boolean> = _ready.asStateFlow()
@@ -422,11 +424,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             runCatching { container.repository.markDelivered(order) }
                 .onSuccess {
+                    lastDeliveredUndo = order
                     DeliveryWidget.refresh(getApplication())
-                    _events.emit(UiEvent.Message("Marked as delivered."))
+                    _events.emit(UiEvent.UndoDelivered("Marked as delivered."))
                 }
                 .onFailure {
+                    lastDeliveredUndo = null
                     _events.emit(UiEvent.Message("Couldn't update the delivery."))
+                }
+        }
+    }
+
+    fun undoMarkDelivered() {
+        val previous = lastDeliveredUndo ?: return
+        lastDeliveredUndo = null
+        viewModelScope.launch {
+            runCatching { container.repository.restore(previous) }
+                .onSuccess {
+                    DeliveryWidget.refresh(getApplication())
+                    _events.emit(UiEvent.Message("Delivery restored."))
+                }
+                .onFailure {
+                    _events.emit(UiEvent.Message("Couldn't undo the delivery update."))
                 }
         }
     }
