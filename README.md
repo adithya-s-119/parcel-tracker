@@ -48,7 +48,7 @@ Online orders are scattered across Gmail, SMS, courier updates, and six differen
 ### Stay ahead
 
 - **Calendar view** with delivery dots, month navigation, and a day-by-day list.
-- **Orders view** with search, delivery-status filters, and manual edits.
+- **Orders view** with search, delivery-status filters, manual edits, and one-tap **Mark delivered** on active orders.
 - **Real status tracking**:
 
 | Status | Meaning |
@@ -70,7 +70,7 @@ Online orders are scattered across Gmail, SMS, courier updates, and six differen
 
 - **Six color themes** — Forest, Ocean, Terracotta, Plum, Indigo, Rose. The whole app and widget pick up the theme.
 - **Full product names** — even when the email subject truncates the title, Parcel reads the body to show the complete name in the editor.
-- **Manual control** — fix a date, change a status, add notes, or delete anything.
+- **Manual control** — fix a date, change a status, mark an order delivered, add notes, or delete anything.
 
 ## How it works
 
