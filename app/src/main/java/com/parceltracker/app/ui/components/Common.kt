@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Inventory2
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -27,6 +28,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -136,6 +141,8 @@ fun OrderCard(
     modifier: Modifier = Modifier,
     onMarkDelivered: (() -> Unit)? = null,
 ) {
+    var showDeliveredConfirm by remember { mutableStateOf(false) }
+
     Surface(
         onClick = onClick,
         modifier = modifier.fillMaxWidth(),
@@ -185,7 +192,7 @@ fun OrderCard(
             }
             if (order.isActive && onMarkDelivered != null) {
                 IconButton(
-                    onClick = onMarkDelivered,
+                    onClick = { showDeliveredConfirm = true },
                     modifier = Modifier.size(38.dp),
                 ) {
                     Icon(
@@ -204,6 +211,34 @@ fun OrderCard(
                 modifier = Modifier.size(19.dp),
             )
         }
+    }
+
+    if (showDeliveredConfirm && onMarkDelivered != null) {
+        AlertDialog(
+            onDismissRequest = { showDeliveredConfirm = false },
+            title = { Text("Mark as delivered?") },
+            text = {
+                Text(
+                    "Mark “${order.itemName.take(70)}” as delivered? " +
+                        "The delivery date will move to today.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeliveredConfirm = false
+                        onMarkDelivered()
+                    },
+                ) {
+                    Text("Mark delivered")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeliveredConfirm = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 }
 

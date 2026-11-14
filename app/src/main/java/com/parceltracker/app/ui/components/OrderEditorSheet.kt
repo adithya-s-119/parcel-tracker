@@ -98,6 +98,7 @@ fun OrderEditorSheet(
     var showDatePicker by remember { mutableStateOf(false) }
     var statusExpanded by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showMarkDeliveredDialog by remember { mutableStateOf(false) }
     var validationError by remember { mutableStateOf<String?>(null) }
 
     ModalBottomSheet(
@@ -356,10 +357,7 @@ fun OrderEditorSheet(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (order.isActive && onMarkDelivered != null) {
                         OutlinedButton(
-                            onClick = {
-                                onMarkDelivered()
-                                onDismiss()
-                            },
+                            onClick = { showMarkDeliveredDialog = true },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(15.dp),
                         ) {
@@ -429,6 +427,30 @@ fun OrderEditorSheet(
                 showModeToggle = false,
             )
         }
+    }
+
+    if (showMarkDeliveredDialog && onMarkDelivered != null) {
+        AlertDialog(
+            onDismissRequest = { showMarkDeliveredDialog = false },
+            title = { Text("Mark as delivered?") },
+            text = { Text("The delivery date will move to today. You can undo this afterwards.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showMarkDeliveredDialog = false
+                        onMarkDelivered()
+                        onDismiss()
+                    },
+                ) {
+                    Text("Mark delivered")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMarkDeliveredDialog = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 
     if (showDeleteDialog && onDelete != null) {
